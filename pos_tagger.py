@@ -12,20 +12,15 @@ def load_data(sentence_file, tag_file=None):
     Suggested to split the data by the document-start symbol.
 
     """
-
-    #vocabulary = set()
-
     sentences = []
     sentence = ['START']
     sentences_tags = None
-    ct = 0
 
     with open(sentence_file, 'r') as x_data:
         print(sentence_file)
         next(x_data) # Skip first -DOCSTART-
         for line in x_data:
-            ct += 1
-            word = line.split(',')[1].replace('"','').strip()
+            word = line.split(',')[1].strip()[1:-1]
             if word.strip() == '-DOCSTART-':
                 sentence.append("END")
                 sentences.append(sentence)
@@ -34,7 +29,6 @@ def load_data(sentence_file, tag_file=None):
                 continue
             else: 
                 sentence.append(word)
-                #vocabulary.add(word)
     
     if tag_file:
         print(tag_file)
@@ -43,17 +37,15 @@ def load_data(sentence_file, tag_file=None):
         with open(tag_file, 'r') as y_data:
             next(y_data)
             for line in y_data:
-
-                tag = line.split(',')[1].replace('"','').strip()
+                tag = line.split(',')[1].strip()[1:-1]
                 #print(tag)                
-                if tag == "O":
+                if tag == 'O':
                     sentence_tags.append('$')
                     sentences_tags.append(sentence_tags)
                     sentence_tags = ['^']
-                elif tag in string.punctuation:
+                elif tag in string.punctuation: 
                     continue
                 else: 
-                    #print('append ' + tag)
                     sentence_tags.append(tag)
 
     # print(sentences)
@@ -95,19 +87,30 @@ class POSTagger():
     """
     def ngram_counter(self, sentences, tags, n):
         counter = {}
-        
-        for sentence, tag in zip(sentences,tags): 
-            sentence_len = len(sentence)
-            for i in range(sentence_len):
-                if i >= n-1: 
-                    print(i)
-                    print(tag[i-n+1:i+1])
-                    counter[tuple(tag[i-n+1:i+1])] += 1
-                else:
-                    continue
+        bigger_s = []
+        bigger_t = []
+        for j, (sentence, tag) in enumerate(zip(sentences, tags)):
 
-        
-        print(counter)
+            if len(sentence) < len(tag): bigger_t.append(j)
+            if len(sentence) > len(tag): bigger_s.append(j)
+
+            # sentence_len = len(sentence)
+            
+            # for i in range(1,sentence_len):
+            #     ngram = None
+            #     if i >= n-1 and i <= sentence_len-n: 
+            #         ngram_labels = tuple(tag[i-n+1:i+1])
+            #     elif i < n-1: 
+            #         ngram_labels = tuple(['^' for x in range(n-i-1)] + tag[:i+1])
+            #         #print(str(tag[:i+1]) + " " + str(tag[i+1:n]))
+            #     else:
+            #         #print(str(i)+ " "+str(sentence_len))
+            #         ngram_labels = tuple(tag[i:])
+            #         #print(tag[i:])
+                    
+            #     counter[ngram_labels] = counter.get(ngram_labels, 0)+1
+        print(bigger_s)
+        print(bigger_t)
         return counter
 
     """
@@ -168,8 +171,8 @@ if __name__ == "__main__":
     # test_data, test_tags = load_data("data/test_x.csv")
 
     #pos_tagger.train(train_data)
-    print(len(train_data[1]))
-    pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
+
+    pos_tagger.ngram_counter(train_data[0],train_data[1], 4)
 
     # Experiment with your decoder using greedy decoding, beam search, viterbi...
 

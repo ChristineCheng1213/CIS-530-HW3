@@ -1,8 +1,17 @@
 """ Contains the part of speech tagger class. """
 import numpy as np
+import pandas as pd
 import string
 import copy
 import sys
+import pprint
+
+TAGS = {'^':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
+    'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
+    'SYM':24,'TO':25,'UH':26,'VB':27,'VBD':28,'VBG':29,'VBN':30,'VBP':31,'VBZ':32,'WDT':33,\
+    'WP':34,'WP$':35,'WRB':36, '$':37}
+NUM_TAGS = len(TAGS)
+
 
 def load_data(sentence_file, tag_file=None):
     """Loads data from two files: one containing sentences and one containing tags.
@@ -19,38 +28,48 @@ def load_data(sentence_file, tag_file=None):
     with open(sentence_file, 'r') as x_data:
         print(sentence_file)
         next(x_data) # Skip first -DOCSTART-
+        next(x_data)
         for line in x_data:
-            word = line.split(',')[1].strip()[1:-1]
+            word = line.split(',',1)[1].strip()[1:-1]
             if word.strip() == '-DOCSTART-':
                 sentence.append("END")
                 sentences.append(sentence)
                 sentence = ['START']
-            elif word in string.punctuation:
-                continue
             else: 
                 sentence.append(word)
     
     if tag_file:
         print(tag_file)
         sentences_tags = []
-        sentence_tags = ['^']
+        sentence_tags = ['START']
         with open(tag_file, 'r') as y_data:
             next(y_data)
+            next(y_data)
             for line in y_data:
-                tag = line.split(',')[1].strip()[1:-1]
-                #print(tag)                
+                tag = line.split(',',1)[1].strip()[1:-1]
                 if tag == 'O':
-                    sentence_tags.append('$')
+                    sentence_tags.append('END')
                     sentences_tags.append(sentence_tags)
-                    sentence_tags = ['^']
-                elif tag in string.punctuation: 
-                    continue
+                    sentence_tags = ['START']
                 else: 
                     sentence_tags.append(tag)
 
-    # print(sentences)
-    # print(sentence_tags)
-    return sentences, sentences_tags
+    if tag_file: return prune_data(sentences, sentences_tags)
+    else: return sentences, sentences_tags
+
+
+def prune_data(sentences, tags):
+    pruned_sentences = []
+    pruned_tags = []
+
+    for sentence, tag in zip(sentences,tags):
+    #df = pd.DataFrame({'word':sentence, 'tag':tag}, columns=['word','tag'])
+        new_sentence = [word for word,label in zip(sentence,tag) if label in TAGS.keys()]
+        new_tag = [label for word,label in zip(sentence,tag) if label in TAGS.keys()]
+        pruned_sentences.append(new_sentence)
+        pruned_tags.append(new_tag)
+    return pruned_sentences, pruned_tags
+
 
 def evaluate(data, model):
     """Evaluates the POS model on some sentences and gold tags.
@@ -66,11 +85,7 @@ def evaluate(data, model):
     pass
 
 class POSTagger():
-    tag_ids = {'^':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
-        'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
-        'SYM':24,'TO':25,'UH':26,'VB':27,'VBD':28,'VBG':29,'VBN':30,'VBP':31,'VBZ':32,'WDT':33,\
-        'WP':34,'WP$':35,'WRB':36, '$':37}
-    NUM_TAGS = len(tag_ids)
+
 
     def __init__(self):
         """Initializes the tagger model parameters and anything else necessary. """
@@ -87,30 +102,26 @@ class POSTagger():
     """
     def ngram_counter(self, sentences, tags, n):
         counter = {}
-        bigger_s = []
-        bigger_t = []
-        for j, (sentence, tag) in enumerate(zip(sentences, tags)):
-
-            if len(sentence) < len(tag): bigger_t.append(j)
-            if len(sentence) > len(tag): bigger_s.append(j)
-
-            # sentence_len = len(sentence)
+        for sentence, tag in zip(sentences, tags):
+            assert(len(sentence) == len(tag))   #housekeeping check
+            l = len(sentence)
             
-            # for i in range(1,sentence_len):
-            #     ngram = None
-            #     if i >= n-1 and i <= sentence_len-n: 
-            #         ngram_labels = tuple(tag[i-n+1:i+1])
-            #     elif i < n-1: 
-            #         ngram_labels = tuple(['^' for x in range(n-i-1)] + tag[:i+1])
-            #         #print(str(tag[:i+1]) + " " + str(tag[i+1:n]))
-            #     else:
-            #         #print(str(i)+ " "+str(sentence_len))
-            #         ngram_labels = tuple(tag[i:])
-            #         #print(tag[i:])
-                    
-            #     counter[ngram_labels] = counter.get(ngram_labels, 0)+1
-        print(bigger_s)
-        print(bigger_t)
+            for i in range(1,l-1):      #skip the only START and END case 
+                ngram = None
+                if i >= n-1 and i <= l-n: 
+                    ngram_labels = tuple(tag[i-n+1:i+1])
+                elif i < n-1: 
+                    ngram_labels = tuple(['^' for x in range(n-i-1)] + tag[:i+1])
+                    #print(str(tag[:i+1]) + " " + str(tag[i+1:n]))
+                    #print(ngram_labels)
+                else:
+                    ngram_labels = tuple(tag[i:]+['$' for x in range(i+n-l)])
+                    #print(str(i)+ " "+str(sentence_len))
+                    #print(ngram_labels)
+                   
+                counter[ngram_labels] = counter.get(ngram_labels, 0) + 1
+
+        #pprint.pprint(counter)
         return counter
 
     """
@@ -120,19 +131,31 @@ class POSTagger():
         - dict: {[word, pos] : count} - number of times a word is assigned with some tag
     """
     def tag_assignment_counter(self, sentences, tags): 
-        pass
+        counter = {}
+        for sentence, tag in zip(sentences, tags):
+            assert(len(sentence) == len(tag))
+            for word, label in zip(sentence, tag):
+                counter[(word,label)] = counter.get((word,label), 0) + 1
+        #pprint.pprint(counter)
+        return counter 
 
     """
     @return: n-d array representing transmission matrix 
+             q(s|u,v) = c(u,v,s) / c(u,v)
     """
     def get_transmissions(self, data):
+        trigrams = ngram_counter(data[0], data[1], 3)
+        bigrams = ngram_counter(data[0], adta[1], 2)
+        
         pass
 
     """
     @return: 2d array of shape (number of unique words, number of pos = 36) representing emission matrix
+             e(x|s) = c(s->x) / c(s)
     """
     def get_emissions(self, data):
         pass
+
 
     def train(self, data):
         """Trains the model by computing transition and emission probabilities.
@@ -172,8 +195,8 @@ if __name__ == "__main__":
 
     #pos_tagger.train(train_data)
 
-    pos_tagger.ngram_counter(train_data[0],train_data[1], 4)
-
+    #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
+    pos_tagger.tag_assignment_counter(train_data[0], train_data[1])
     # Experiment with your decoder using greedy decoding, beam search, viterbi...
 
     # Here you can also implement experiments that compare different styles of decoding,

@@ -9,7 +9,7 @@ import pprint
 TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
     'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
     'SYM':24,'TO':25,'UH':26,'VB':27,'VBD':28,'VBG':29,'VBN':30,'VBP':31,'VBZ':32,'WDT':33,\
-    'WP':34,'WP$':35,'WRB':36, 'END':37}
+    'WP':34,'WP$':35,'WRB':36, 'END':37, 'UNKOWN':38}
 NUM_TAGS = len(TAGS)
 
 
@@ -90,9 +90,15 @@ class POSTagger():
     def __init__(self):
         """Initializes the tagger model parameters and anything else necessary. """
         #trigram_transmissions = np.zeros(NUM_TAGS,NUM_TAGS,NUM_TAGS) # q(C|A,B) = t_t[id[A],id[B],id[C]]
+        word_encodings = None
         trigram_transmissions = None
         emissions = None
-        word_encodings = None
+
+    def generate_states(self, data):
+        self.word_encodings = self.encode_words(data[0])
+        self.trigram_transmissions = self.get_transmissions(data)
+        self.emissions = self.get_emissions(data)
+
 
     """
     @returns: { words : int } encoding of words 
@@ -181,12 +187,11 @@ class POSTagger():
              e(x|s) = c(s->x) / c(s) => arr[x,s]
     """
     def get_emissions(self, data):
-        self.word_encodings = self.encode_words(data[0])
         unigram = self.ngram_counter(data[0], data[1], 1)
         tag_assignment = self.tag_assignment_counter(data[0], data[1])
         num_words = len(self.word_encodings)
         emission_matrix = np.zeros((num_words, NUM_TAGS))
-        print(unigram)
+        #print(unigram)
 
         for sentence, tag in zip(data[0], data[1]):
             for word, label in zip(sentence, tag):
@@ -233,9 +238,10 @@ if __name__ == "__main__":
     # dev_data, dev_tags = load_data("data/dev_x.csv", "data/dev_y.csv")
     # test_data, test_tags = load_data("data/test_x.csv")
     pos_tagger = POSTagger()
+    pos_tagger.generate_states(train_data)
     #pos_tagger.train(train_data)
     #pos_tagger.get_transmissions(train_data)
-    pos_tagger.get_emissions(train_data)
+    #pos_tagger.get_emissions(train_data)
 
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])

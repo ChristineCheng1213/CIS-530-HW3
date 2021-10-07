@@ -181,7 +181,48 @@ class POSTagger():
 
         #print(trans_matrix)
         return trans_matrix
+    def get_transmissions_add_k(self, data, k):
+        trigrams = self.ngram_counter(data[0], data[1], 3)
+        bigrams = self.ngram_counter(data[0], data[1], 2)
+        trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
 
+        for u in range(NUM_TAGS):
+            for v in range(NUM_TAGS):
+                c_uv = bigrams.get((u,v), 0)     
+                for s in range(NUM_TAGS):
+                    c_uvs = trigrams.get((u,v,s), 0) 
+                    trans_matrix[u][v][s] = (c_uvs+k) / (c_uv+k*NUM_TAGS*NUM_TAGS) #add k to numerator, k*number of possible bigrams to denominator
+
+        #print(trans_matrix)
+        return trans_matrix
+    def get_transmissions_linear_interpolation(self, data, l1, l2):
+        """
+        @params: 
+            -data: sentences, tags
+            -l1: weight for trigram
+            -l2: weight for bigram
+            -l1,l2>=0, l1+l2<=1
+
+        """
+        trigrams = self.ngram_counter(data[0], data[1], 3)
+        bigrams = self.ngram_counter(data[0], data[1], 2)
+        unigrams = self.ngram_counter(data[0],data[1],1)
+        trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
+
+        for u in range(NUM_TAGS):
+            for v in range(NUM_TAGS):
+                c_uv = bigrams.get((u,v), 0)
+                c_vs = bigrams.get((v,s),0)
+                c_v = unigrams.get((v),0)
+                for s in range(NUM_TAGS):
+                    c_uvs = trigrams.get((u,v,s), 0) 
+                    trigram_transmission = c_uvs / c_uv if c_uv != 0 else 0
+                    bigram_transmission = c_vs / c_v if c_v != 0 else 0
+                    unigram_transmission = c_v / len(data[1]) #I think this is right but not 100% sure
+                    trans_matrix[u][v][s] = l1* trigram_transmission + l2 * bigram_transmission + (1-l1-l2) * unigram_transmission
+
+        #print(trans_matrix)
+        return trans_matrix
     """
     @return: 2d array of shape (number of unique words, number of pos = 36) representing emission matrix
              e(x|s) = c(s->x) / c(s) => arr[x,s]

@@ -284,13 +284,19 @@ class POSTagger():
         self.trigram_transmissions = self.get_transmissions(data)
         self.emissions = self.get_emissions(data)
 
-    def sequence_probability(self, sequence, tags, n):
+    def sequence_probability(self, sequence, tags):
         """Computes the probability of a tagged sequence given the emission/transition
         probabilities.
         """
-        for word, tag in zip(sequence, tags):
+        probability = 1
+        sequence = ['START'] + sequence + ['END']
+        tags = ['START'] + sequence + ['END']
+        for i in range(2, len(sequence)):
+            probability *= self.trigram_transmissions[tags[i-2][i-1][i]]
+            probability *= self.emissions[sequence[i]][tags[i]]
 
-        return 0.
+
+        return probability
 
     def inference(self, sequence):
         """Tags a sequence with part of speech tags.

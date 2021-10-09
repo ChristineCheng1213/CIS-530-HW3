@@ -5,11 +5,12 @@ import string
 import copy
 import sys
 import pprint
+import re
 
 TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
     'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
     'SYM':24,'TO':25,'UH':26,'VB':27,'VBD':28,'VBG':29,'VBN':30,'VBP':31,'VBZ':32,'WDT':33,\
-    'WP':34,'WP$':35,'WRB':36, 'END':37, 'UNKOWN':38}
+    'WP':34,'WP$':35,'WRB':36, 'END':37}
 NUM_TAGS = len(TAGS)
 
 
@@ -71,6 +72,40 @@ def prune_data(sentences, tags):
     return pruned_sentences, pruned_tags
 
 
+def rare_words(sentences, threshold = 5):
+    word_counts = {}
+    for sentence in sentences:
+        for word in sentence:
+            word_counts[word] = word_counts.get(word,0) + 1
+    for sentence in sentences:
+        for i in range(len(sentence)):
+            if word_counts[sentence[i]] < threshold:
+                sentence[i] = "_RARE_"
+
+def rare_words_morpho(sentences, threshold = 5):
+    word_counts = {}
+    for sentence in sentences:
+        for word in sentence:
+            word_counts[word] = word_counts.get(word,0) + 1
+    for sentence in sentences:
+        for i in range(len(sentence)):
+            if word_counts[sentence[i]] < threshold:
+                if not re.search(r'\w', word): # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html
+                    return '_PUNCS_'
+                elif re.search(r'[A-Z]', word):
+                    return '_CAPITAL_'
+                elif re.search(r'\d', word):
+                    return '_NUM_'
+                elif re.search(r'(ion\b|ty\b|ics\b|ment\b|ence\b|ance\b|ness\b|ist\b|ism\b)',word):
+                    return '_NOUNLIKE_'
+                elif re.search(r'(ate\b|fy\b|ize\b|\ben|\bem)', word):
+                    return '_VERBLIKE_'
+                elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',word):
+                    return '_ADJLIKE_'
+                else:
+                    return '_RARE_'
+
+
 def evaluate(data, model):
     """Evaluates the POS model on some sentences and gold tags.
 
@@ -90,15 +125,9 @@ class POSTagger():
     def __init__(self):
         """Initializes the tagger model parameters and anything else necessary. """
         #trigram_transmissions = np.zeros(NUM_TAGS,NUM_TAGS,NUM_TAGS) # q(C|A,B) = t_t[id[A],id[B],id[C]]
-        word_encodings = None
         trigram_transmissions = None
         emissions = None
-
-    def generate_states(self, data):
-        self.word_encodings = self.encode_words(data[0])
-        self.trigram_transmissions = self.get_transmissions(data)
-        self.emissions = self.get_emissions(data)
-
+        word_encodings = None
 
     """
     @returns: { words : int } encoding of words 
@@ -126,7 +155,7 @@ class POSTagger():
         for sentence, tag in zip(sentences, tags):
             assert(len(sentence) == len(tag))   #housekeeping check
             l = len(sentence)
-            ngram_range = range(1, l-1) if n > 1 else range(l)      #skip the only START and END case except for unigrams
+            ngram_range = range(1, l-1) if n > 1 else range(l)       #skip the only START and END case except for unigrams
 
             for i in ngram_range:      
                 ngram = None
@@ -228,11 +257,12 @@ class POSTagger():
              e(x|s) = c(s->x) / c(s) => arr[x,s]
     """
     def get_emissions(self, data):
-        unigram = self.ngram_counter(data[0], data[1], 1)
+        self.word_encodings = self.encode_words(data[0])
+        unigram = ngram_counter(data[0], data[1], 1)
         tag_assignment = self.tag_assignment_counter(data[0], data[1])
         num_words = len(self.word_encodings)
         emission_matrix = np.zeros((num_words, NUM_TAGS))
-        #print(unigram)
+        print(unigram)
 
         for sentence, tag in zip(data[0], data[1]):
             for word, label in zip(sentence, tag):
@@ -251,12 +281,15 @@ class POSTagger():
             - N-gram models with varying N.
         
         """
-        pass
+        self.trigram_transmissions = self.get_transmissions(data)
+        self.emissions = self.get_emissions(data)
 
-    def sequence_probability(self, sequence, tags):
+    def sequence_probability(self, sequence, tags, n):
         """Computes the probability of a tagged sequence given the emission/transition
         probabilities.
         """
+        for word, tag in zip(sequence, tags):
+
         return 0.
 
     def inference(self, sequence):
@@ -270,6 +303,11 @@ class POSTagger():
             - viterbi
         """
         return []
+    def viterbi(self, sequence):
+        """Generates tags through Viterbi algorithm
+        
+        """
+
 
 
 if __name__ == "__main__":
@@ -279,10 +317,9 @@ if __name__ == "__main__":
     # dev_data, dev_tags = load_data("data/dev_x.csv", "data/dev_y.csv")
     # test_data, test_tags = load_data("data/test_x.csv")
     pos_tagger = POSTagger()
-    pos_tagger.generate_states(train_data)
     #pos_tagger.train(train_data)
     #pos_tagger.get_transmissions(train_data)
-    #pos_tagger.get_emissions(train_data)
+    pos_tagger.get_emissions(train_data)
 
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])

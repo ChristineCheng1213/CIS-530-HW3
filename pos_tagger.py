@@ -451,26 +451,26 @@ if __name__ == "__main__":
     train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
     word_counts = rare_words_morpho_train(train_x)
     dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
-    mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
+    # mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
     rare_words_morpho(dev_x,word_counts, 5)
 
     pos_tagger = POSTagger()
-    #pos_tagger.train([train_x, train_y], smoothing='add-k')
-    #dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
-    # probabilities = []
-    # for i in range(len(dev_x)):
-    #     y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
-    #     y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
-    #     if y_prob > y_pred_prob:
-    #         print("oh no")
-    #         print(y_pred_prob,y_prob,i,len(dev_x[i]))
+    pos_tagger.train([train_x, train_y], smoothing='add-k')
+    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
+    probabilities = []
+    for i in range(len(dev_x)):
+        y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
+        y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
+        if y_prob > y_pred_prob:
+            print("oh no")
+            print(y_pred_prob,y_prob,i,len(dev_x[i]))
 
-    #     probabilities.append((y_pred_prob,y_prob))
-    # print(probabilities)
-    rare_words_morpho(mini_x,word_counts, 5)
-    pos_tagger.train([mini_x, mini_y], smoothing='add-k')
-    test_beam = [pos_tagger.beam_search(sentence,3) for sentence in mini_x]
-    print(test_beam)
+        probabilities.append((y_pred_prob,y_prob))
+    print(probabilities)
+    # rare_words_morpho(mini_x,word_counts, 5)
+    # pos_tagger.train([mini_x, mini_y], smoothing='add-k')
+    # test_beam = [pos_tagger.beam_search(sentence,3) for sentence in mini_x]
+    # print(test_beam)
     # TODO: test sub-optimalities on index 259
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])

@@ -6,3 +6,5 @@ TODO:
 *Experiment with other smoothing algorithms (Good-Turing, Kneser)
 
 *Look into other ways to deal with unknown words (Deterministic??)
+
+*Generalize to bigram, 4-gram, n-gram

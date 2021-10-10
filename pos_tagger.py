@@ -6,6 +6,7 @@ import copy
 import sys
 import pprint
 import re
+from collections import OrderedDict
 
 TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
     'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
@@ -14,6 +15,8 @@ TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS'
 TAG_IDS = {v:k for k,v in TAGS.items()}
 NUM_TAGS = len(TAGS)
 
+
+## ======================== Loading Data ======================== ##
 
 def load_data(sentence_file, tag_file=None):
     """Loads data from two files: one containing sentences and one containing tags.
@@ -72,6 +75,8 @@ def prune_data(sentences, tags):
         pruned_tags.append(new_tag)
     return pruned_sentences, pruned_tags
 
+
+## ======================== Smoothing ======================== ##
 
 def rare_words_train(sentences, threshold = 5):
     word_counts = {}
@@ -134,6 +139,7 @@ def rare_words_morpho(sentences, word_counts, threshold = 5):
                     sentence[i] =  '_RARE_'
 
 
+
 def evaluate(data, model):
     """Evaluates the POS model on some sentences and gold tags.
 
@@ -147,6 +153,8 @@ def evaluate(data, model):
     """
     pass
 
+
+
 class POSTagger():
 
 
@@ -157,10 +165,11 @@ class POSTagger():
         emissions = None
         word_encodings = None
 
-    """
-    @returns: { words : int } encoding of words 
-    """
+
     def encode_words(self, sentences):
+        """
+        @returns: { words : int } encoding of words 
+        """       
         index = 0
         word_encodings = {}
         for sentence in sentences:
@@ -170,14 +179,15 @@ class POSTagger():
                     index += 1
         return word_encodings
 
-    """
-    @params: 
-        - sentences, tags: 2d array of data
-        - n: length of pos sequence
-    @return: 
-        - dict: {[pos_1,..,pos_n] : count} - number of times a pos sequence appears 
-    """
+
     def ngram_counter(self, sentences, tags, n):
+        """
+        @params: 
+            - sentences, tags: 2d array of data
+            - n: length of pos sequence
+        @return: 
+            - dict: {[pos_1,..,pos_n] : count} - number of times a pos sequence appears 
+        """   
         counter = {}
 
         for sentence, tag in zip(sentences, tags):
@@ -205,13 +215,14 @@ class POSTagger():
         #pprint.pprint(counter)
         return counter
 
-    """
-    @params: 
-        - sentences, tags: 2d array of data 
-    @return: 
-        - dict: {[word, pos] : count} - number of times a word is assigned with some tag
-    """
+
     def tag_assignment_counter(self, sentences, tags): 
+        """
+        @params: 
+            - sentences, tags: 2d array of data 
+        @return: 
+            - dict: {[word, pos] : count} - number of times a word is assigned with some tag
+        """        
         counter = {}
         for sentence, tag in zip(sentences, tags):
             assert(len(sentence) == len(tag))
@@ -220,11 +231,12 @@ class POSTagger():
         #pprint.pprint(counter)
         return counter
 
-    """
-    @return: n-d array representing transmission matrix 
-             q(s|u,v) = c(u,v,s) / c(u,v)  => arr[u,v,s]
-    """
+
     def get_transmissions(self, data):
+        """
+        @return: n-d array representing transmission matrix 
+                q(s|u,v) = c(u,v,s) / c(u,v)  => arr[u,v,s]
+        """        
         trigrams = self.ngram_counter(data[0], data[1], 3)
         bigrams = self.ngram_counter(data[0], data[1], 2)
         trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
@@ -238,6 +250,8 @@ class POSTagger():
 
         #print(trans_matrix)
         return trans_matrix
+
+
     def get_transmissions_add_k(self, data, k):
         trigrams = self.ngram_counter(data[0], data[1], 3)
         bigrams = self.ngram_counter(data[0], data[1], 2)
@@ -252,6 +266,7 @@ class POSTagger():
 
         #print(trans_matrix)
         return trans_matrix
+
     def get_transmissions_linear_interpolation(self, data, l1, l2):
         """
         @params: 
@@ -280,11 +295,13 @@ class POSTagger():
 
         #print(trans_matrix)
         return trans_matrix
-    """
-    @return: 2d array of shape (number of unique words, number of pos = 36) representing emission matrix
-             e(x|s) = c(s->x) / c(s) => arr[x,s]
-    """
+
+
     def get_emissions(self, data):
+        """
+        @return: 2d array of shape (number of unique words, number of pos = 36) representing emission matrix
+                e(x|s) = c(s->x) / c(s) => arr[x,s]
+        """        
         self.word_encodings = self.encode_words(data[0])
         unigram = self.ngram_counter(data[0], data[1], 1)
         tag_assignment = self.tag_assignment_counter(data[0], data[1])
@@ -302,11 +319,7 @@ class POSTagger():
 
     def train(self, data, smoothing = 'None', k=.3, l1=.5, l2=.3):
         """Trains the model by computing transition and emission probabilities.
-
-        You should also experiment:
-            - smoothing.
-            - N-gram models with varying N.
-        
+        Set transmission and emission matrix with customized smoothing techniques       
         """
         if smoothing == 'add-k':
             self.trigram_transmissions = self.get_transmissions_add_k(data,k)
@@ -316,6 +329,7 @@ class POSTagger():
             self.trigram_transmissions = self.get_transmissions(data)
         
         self.emissions = self.get_emissions(data)
+
 
     def sequence_probability(self, sequence, tags):
         """Computes the probability of a tagged sequence given the emission/transition
@@ -328,8 +342,8 @@ class POSTagger():
             probability += np.log(self.trigram_transmissions[TAGS[tags[i-2]]][TAGS[tags[i-1]]][TAGS[tags[i]]])
             probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
 
-
         return probability
+
 
     def inference(self, sequence):
         """Tags a sequence with part of speech tags.
@@ -342,9 +356,33 @@ class POSTagger():
             - viterbi
         """
         return []
+
+    def beam_search(self, sequence, K=1): 
+        prev_indices = [0]
+        prev_pis = [0]
+        assigned_tags = [0]
+
+        for k in range(1,len(sequence)):
+            new_indices = []
+            new_pis = []
+            for index, pi in zip(prev_indices, prev_pis):
+                u = index // NUM_TAGS
+                v = index % NUM_TAGS
+                for i in range(NUM_TAGS):
+                    new_pi = pi + np.log(self.trigram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                    new_indices.append(v*NUM_TAGS + i)
+                    new_pis.append(new_pi)
+            
+            new_sorted = sorted(zip(new_pis, new_indices), key=lambda pair:pair[0])[-K:]
+            prev_indices = [i for p, i in new_sorted]
+            prev_pis = [p for p, i in new_sorted]
+            assigned_tags.append(prev_indices[-1] % NUM_TAGS)
+
+        return [TAG_IDS[tag] for tag in assigned_tags]
+
+
     def viterbi(self, sequence):
         """Generates tags through Viterbi algorithm
-        
         """
         # print(sequence)
         lattice = np.zeros((NUM_TAGS**2,len(sequence)))
@@ -413,23 +451,26 @@ if __name__ == "__main__":
     train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
     word_counts = rare_words_morpho_train(train_x)
     dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
+    mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
     rare_words_morpho(dev_x,word_counts, 5)
-    # test_data, test_tags = load_data("data/test_x.csv")
-    pos_tagger = POSTagger()
-    #pos_tagger.train(train_data)
-    #pos_tagger.get_transmissions(train_data)
-    pos_tagger.train([train_x, train_y], smoothing='add-k')
-    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
-    probabilities = []
-    for i in range(len(dev_x)):
-        y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
-        y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
-        if y_prob > y_pred_prob:
-            print("oh no")
-            print(y_pred_prob,y_prob,i,len(dev_x[i]))
 
-        probabilities.append((y_pred_prob,y_prob))
-    print(probabilities)
+    pos_tagger = POSTagger()
+    #pos_tagger.train([train_x, train_y], smoothing='add-k')
+    #dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
+    # probabilities = []
+    # for i in range(len(dev_x)):
+    #     y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
+    #     y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
+    #     if y_prob > y_pred_prob:
+    #         print("oh no")
+    #         print(y_pred_prob,y_prob,i,len(dev_x[i]))
+
+    #     probabilities.append((y_pred_prob,y_prob))
+    # print(probabilities)
+    rare_words_morpho(mini_x,word_counts, 5)
+    pos_tagger.train([mini_x, mini_y], smoothing='add-k')
+    test_beam = [pos_tagger.beam_search(sentence,3) for sentence in mini_x]
+    print(test_beam)
     # TODO: test sub-optimalities on index 259
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])

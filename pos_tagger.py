@@ -383,6 +383,7 @@ class POSTagger():
 
     def viterbi(self, sequence):
         """Generates tags through Viterbi algorithm
+        
         """
         # print(sequence)
         lattice = np.zeros((NUM_TAGS**2,len(sequence)))
@@ -402,14 +403,19 @@ class POSTagger():
                 for i in range(NUM_TAGS):
                     # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
                     pi = prev_pi + np.log(self.trigram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
-                    if pi > i_max:
-                        i_max = pi 
-                        max_tag = i
-                if i_max> np.NINF:
-                    if (v, max_tag) not in maxes.keys():
-                        maxes[(v,max_tag)] = [(u,i_max)]
-                    else:
-                        maxes[(v,max_tag)].append((u,i_max))
+                    if pi > np.NINF:
+                        # i_max = pi 
+                        # max_tag = i
+                        if(v, i) not in maxes.keys():
+                            maxes[(v,i)] = [(u, pi)]
+                        else:
+                            maxes[(v,i)].append((u,pi))
+
+                # if i_max> np.NINF:
+                #     if (v, max_tag) not in maxes.keys():
+                #         maxes[(v,max_tag)] = [(u,i_max)]
+                #     else:
+                #         maxes[(v,max_tag)].append((u,i_max))
             nonzero_indices = []
             # print(maxes)
             for (v,w) in maxes.keys(): #find best path for each node and 
@@ -428,6 +434,7 @@ class POSTagger():
         best_endpoint = max(endpoints, key= lambda x: x[1])
         # print(best_endpoint)
         # print(lattice)
+        np.savetxt('lattice.csv',lattice,delimiter=',')
         # print(backpointers)
         tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
         for k in range(len(sequence)-1,1,-1):
@@ -436,7 +443,6 @@ class POSTagger():
             tags.insert(0,prev_index//NUM_TAGS)
         tag_strings = [TAG_IDS[tag] for tag in tags]
         return tag_strings
-
 
             
 

@@ -108,13 +108,13 @@ def rare_words_morpho_train(sentences, threshold = 5):
                     sentence[i] = '_RARE_'
     return word_counts
 
-def rare_words(sentences, threshold, word_counts):
+def rare_words(sentences, word_counts, threshold = 5):
     for sentence in sentences:
         for i in range(len(sentence)):
             if word_counts.get(sentence[i],0) < threshold:
                 sentence[i] = "_RARE_"
 
-def rare_words_morpho(sentences, threshold, word_counts):
+def rare_words_morpho(sentences, word_counts, threshold = 5):
     for sentence in sentences:
         for i in range(len(sentence)):
             if word_counts.get(sentence[i],0) < threshold:
@@ -131,7 +131,7 @@ def rare_words_morpho(sentences, threshold, word_counts):
                 elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',sentence[i]):
                     sentence[i] = '_ADJLIKE_'
                 else:
-                    sentence[i] = '_RARE_'
+                    sentence[i] =  '_RARE_'
 
 
 def evaluate(data, model):
@@ -290,7 +290,6 @@ class POSTagger():
         tag_assignment = self.tag_assignment_counter(data[0], data[1])
         num_words = len(self.word_encodings)
         emission_matrix = np.zeros((num_words, NUM_TAGS))
-        print(unigram)
 
         for sentence, tag in zip(data[0], data[1]):
             for word, label in zip(sentence, tag):
@@ -301,7 +300,7 @@ class POSTagger():
         return emission_matrix
 
 
-    def train(self, data):
+    def train(self, data, smoothing = 'None', k=.3, l1=.5, l2=.3):
         """Trains the model by computing transition and emission probabilities.
 
         You should also experiment:
@@ -309,19 +308,25 @@ class POSTagger():
             - N-gram models with varying N.
         
         """
-        self.trigram_transmissions = self.get_transmissions(data)
+        if smoothing == 'add-k':
+            self.trigram_transmissions = self.get_transmissions_add_k(data,k)
+        elif smoothing == 'linear_interpolation':
+            self.trigram_transmissions = self.get_transmissions_linear_interpolation(data,l1,l2)
+        else: 
+            self.trigram_transmissions = self.get_transmissions(data)
+        
         self.emissions = self.get_emissions(data)
 
     def sequence_probability(self, sequence, tags):
         """Computes the probability of a tagged sequence given the emission/transition
         probabilities.
         """
-        probability = 1
-        sequence = ['START'] + sequence + ['END']
-        tags = ['START'] + sequence + ['END']
+        probability = np.log(1)
+        sequence = ['START'] + sequence 
+        tags = ['START'] + tags 
         for i in range(2, len(sequence)):
-            probability *= self.trigram_transmissions[tags[i-2][i-1][i]]
-            probability *= self.emissions[sequence[i]][tags[i]]
+            probability += np.log(self.trigram_transmissions[TAGS[tags[i-2]]][TAGS[tags[i-1]]][TAGS[tags[i]]])
+            probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
 
 
         return probability
@@ -341,38 +346,58 @@ class POSTagger():
         """Generates tags through Viterbi algorithm
         
         """
+        # print(sequence)
         lattice = np.zeros((NUM_TAGS**2,len(sequence)))
         backpointers = np.zeros((NUM_TAGS**2, len(sequence)))
-        lattice[0,0] = 1 #u,v,k -> NUM_TAGS*u+v,k
-        nonzero_indices = 0 #keep track of the nonzero pi values from the previous time step
+        lattice[0][0] = 1 #u,v,k -> NUM_TAGS*u+v,k
+        lattice = np.log(lattice)
+        nonzero_indices = [0] #keep track of the nonzero pi values from the previous time step
         for k in range(1,len(sequence)):
-            maxes = {[] for i in NUM_TAGS } #highest pi values and path for each tag
+            maxes = {} #highest pi values and path for each tag
             for index in nonzero_indices:
-                u = index % NUM_TAGS
-                v = index // NUM_TAGS
+                u = index // NUM_TAGS
+                v = index % NUM_TAGS
                 prev_pi = lattice[index,k-1]
-                i_max = 0 
+                # print(prev_pi)
+                i_max =  np.NINF
                 max_tag = -1
-                for i in NUM_TAGS:
-                    pi = prev_pi * self.trigram_transmissions[u][v][i] * self.emissions[sequence[k]][i]
+                for i in range(NUM_TAGS):
+                    # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
+                    pi = prev_pi + np.log(self.trigram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
                     if pi > i_max:
                         i_max = pi 
                         max_tag = i
-                maxes[max_tag].append((index,i_max))
-            for i in NUM_TAGS:
-                best_path = max(maxes[i], key=lambda x: x[1])
-                v = best_path[0] // NUM_TAGS
-                lattice[v*NUM_TAGS+i, k] = best_path[1]
-                backpointers[v*NUM_TAGS+i, k] = best_path[0]
+                if i_max> np.NINF:
+                    if (v, max_tag) not in maxes.keys():
+                        maxes[(v,max_tag)] = [(u,i_max)]
+                    else:
+                        maxes[(v,max_tag)].append((u,i_max))
+            nonzero_indices = []
+            # print(maxes)
+            for (v,w) in maxes.keys(): #find best path for each node and 
+                best_path = max(maxes[(v,w)], key=lambda x: x[1])
+                # print(best_path)
+                u = best_path[0] 
+                lattice[v*NUM_TAGS+w][k] = best_path[1]
+                backpointers[v*NUM_TAGS+w][k] = u*NUM_TAGS+v
+                if best_path[1]>np.NINF:
+                    nonzero_indices.append(v*NUM_TAGS+w)
+            # print(nonzero_indices)
         endpoints = []
         for i in range(NUM_TAGS-1,NUM_TAGS**2-1,NUM_TAGS):
             endpoints.append((i,lattice[i,len(sequence)-1]))
+        # print(endpoints)
         best_endpoint = max(endpoints, key= lambda x: x[1])
+        # print(best_endpoint)
+        # print(lattice)
+        # print(backpointers)
         tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
-        for k in range(len(sequence)-2,-1,-1):
-            prev_index = backpointers[tags[0]*NUM_TAGS+tags[1],k]
+        for k in range(len(sequence)-1,1,-1):
+            # print(tags)
+            prev_index = int(backpointers[tags[0]*NUM_TAGS+tags[1]][k])
             tags.insert(0,prev_index//NUM_TAGS)
-        return [TAG_IDS[tag] for tag in tags]
+        tag_strings = [TAG_IDS[tag] for tag in tags]
+        return tag_strings
 
 
             
@@ -382,19 +407,30 @@ class POSTagger():
 
 
 
-
-
 if __name__ == "__main__":
 
 
-    train_data = load_data("data/train_x.csv", "data/train_y.csv")
-    # dev_data, dev_tags = load_data("data/dev_x.csv", "data/dev_y.csv")
+    train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
+    word_counts = rare_words_morpho_train(train_x)
+    dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
+    rare_words_morpho(dev_x,word_counts, 5)
     # test_data, test_tags = load_data("data/test_x.csv")
     pos_tagger = POSTagger()
     #pos_tagger.train(train_data)
     #pos_tagger.get_transmissions(train_data)
-    pos_tagger.get_emissions(train_data)
+    pos_tagger.train([train_x, train_y], smoothing='add-k')
+    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
+    probabilities = []
+    for i in range(len(dev_x)):
+        y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
+        y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
+        if y_prob > y_pred_prob:
+            print("oh no")
+            print(y_pred_prob,y_prob,i,len(dev_x[i]))
 
+        probabilities.append((y_pred_prob,y_prob))
+    print(probabilities)
+    # TODO: test sub-optimalities on index 259
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])
 

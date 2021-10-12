@@ -83,60 +83,78 @@ def rare_words_train(sentences, threshold = 5):
     for sentence in sentences:
         for word in sentence:
             word_counts[word] = word_counts.get(word,0) + 1
+    processed_sentences = []
     for sentence in sentences:
-        for i in range(len(sentence)):
-            if word_counts[sentence[i]] < threshold:
-                sentence[i] = "_RARE_"
-    return word_counts
+        processed_sentence = []
+        for word in sentence:
+            if word_counts[word] < threshold:
+                processed_sentence.append("_RARE_")
+            else: processed_sentence.append(word)
+        processed_sentences.append(processed_sentence)
+    return processed_sentences, word_counts
 
 def rare_words_morpho_train(sentences, threshold = 5):
     word_counts = {}
     for sentence in sentences:
         for word in sentence:
             word_counts[word] = word_counts.get(word,0) + 1
+    processed_sentences = []
     for sentence in sentences:
-        for i in range(len(sentence)):
-            if word_counts[sentence[i]] < threshold:
-                if not re.search(r'\w', sentence[i]): # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html
-                    sentence[i] = '_PUNCS_'
-                elif re.search(r'[A-Z]', sentence[i]):
-                    sentence[i] = '_CAPITAL_'
-                elif re.search(r'\d', sentence[i]):
-                    sentence[i] = '_NUM_'
-                elif re.search(r'(ion\b|ty\b|ics\b|ment\b|ence\b|ance\b|ness\b|ist\b|ism\b)',sentence[i]):
-                    sentence[i] = '_NOUNLIKE_'
-                elif re.search(r'(ate\b|fy\b|ize\b|\ben|\bem)', sentence[i]):
-                    sentence[i] = '_VERBLIKE_'
-                elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',sentence[i]):
-                    sentence[i] = '_ADJLIKE_'
+        for word in sentence:
+            processed_sentence = []
+            if word_counts[word] < threshold: # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html     
+                if not re.search(r'\w', word): 
+                    processed_sentence.append('_PUNCS_')
+                elif re.search(r'[A-Z]', word):
+                    processed_sentence.append('_CAPITAL_')
+                elif re.search(r'\d', word):
+                    processed_sentence.append('_NUM_')
+                elif re.search(r'(ion\b|ty\b|ics\b|ment\b|ence\b|ance\b|ness\b|ist\b|ism\b)',word):
+                    processed_sentence.append('_NOUNLIKE_')
+                elif re.search(r'(ate\b|fy\b|ize\b|\ben|\bem)', word):
+                    processed_sentence.append('_VERBLIKE_')
+                elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',word):
+                    processed_sentence.append('_ADJLIKE_')
                 else:
-                    sentence[i] = '_RARE_'
-    return word_counts
+                    processed_sentence.append('_RARE_')
+            else: processed_sentence.append(word)
+        processed_sentences.append(processed_sentence)
+    return processed_sentences, word_counts
 
 def rare_words(sentences, word_counts, threshold = 5):
+    processed_sentences = []
     for sentence in sentences:
-        for i in range(len(sentence)):
-            if word_counts.get(sentence[i],0) < threshold:
-                sentence[i] = "_RARE_"
+        processed_sentence = []
+        for word in sentence:
+            if word_counts.get(word,0) < threshold:
+                processed_sentence.append("_RARE_")
+            else: processed_sentence.append(word)
+        processed_sentences.append(processed_sentence)
+    return processed_sentences
 
 def rare_words_morpho(sentences, word_counts, threshold = 5):
+    processed_sentences = []
     for sentence in sentences:
-        for i in range(len(sentence)):
-            if word_counts.get(sentence[i],0) < threshold:
-                if not re.search(r'\w', sentence[i]): # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html
-                    sentence[i] = '_PUNCS_'
-                elif re.search(r'[A-Z]', sentence[i]):
-                    sentence[i] = '_CAPITAL_'
-                elif re.search(r'\d', sentence[i]):
-                    sentence[i] = '_NUM_'
-                elif re.search(r'(ion\b|ty\b|ics\b|ment\b|ence\b|ance\b|ness\b|ist\b|ism\b)',sentence[i]):
-                    sentence[i] = '_NOUNLIKE_'
-                elif re.search(r'(ate\b|fy\b|ize\b|\ben|\bem)', sentence[i]):
-                    sentence[i] = '_VERBLIKE_'
-                elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',sentence[i]):
-                    sentence[i] = '_ADJLIKE_'
+        processed_sentence = []
+        for word in sentence:
+            if word_counts.get(word,0) < threshold: # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html
+                if not re.search(r'\w', word): 
+                    processed_sentence.append('_PUNCS_')
+                elif re.search(r'[A-Z]', word):
+                    processed_sentence.append('_CAPITAL_')
+                elif re.search(r'\d', word):
+                    processed_sentence.append('_NUM_')
+                elif re.search(r'(ion\b|ty\b|ics\b|ment\b|ence\b|ance\b|ness\b|ist\b|ism\b)',word):
+                    processed_sentence.append('_NOUNLIKE_')
+                elif re.search(r'(ate\b|fy\b|ize\b|\ben|\bem)', word):
+                    processed_sentence.append('_VERBLIKE_')
+                elif re.search(r'(\bun|\bin|ble\b|ry\b|ish\b|ious\b|ical\b|\bnon)',word):
+                    processed_sentence.append('_ADJLIKE_')
                 else:
-                    sentence[i] =  '_RARE_'
+                    processed_sentence.append('_RARE_')
+            else: processed_sentence.append(word)
+        processed_sentences.append(processed_sentence)
+    return processed_sentences
 
 
 
@@ -444,7 +462,11 @@ class POSTagger():
         tag_strings = [TAG_IDS[tag] for tag in tags]
         return tag_strings
 
-            
+def clean_output(original_sentences, sentences, tags):
+    for sentence, tag in zip(original_sentences, tags):
+        for i in range(len(sentence)):
+            if sentence[i] in string.punctuation:
+                tags.insert(i,sentence[i])
 
 
 
@@ -452,24 +474,26 @@ class POSTagger():
 
 
 if __name__ == "__main__":
-
+    # TODO: update rare word script to not work in-place
+    # figure out punctuation cleaning without tags?
+    # 
 
     train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
-    word_counts = rare_words_morpho_train(train_x)
+    train_x_rare, word_counts = rare_words_morpho_train(train_x)
     dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
     # mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
-    rare_words_morpho(dev_x,word_counts, 5)
+    dev_x_rare = rare_words_morpho(dev_x,word_counts, 5)
 
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x, train_y], smoothing='add-k')
-    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x]
+    pos_tagger.train([train_x_rare, train_y], smoothing='linear interpolation')
+    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
     probabilities = []
     for i in range(len(dev_x)):
-        y_pred_prob = pos_tagger.sequence_probability(dev_x[i],dev_y_pred[i])
-        y_prob = pos_tagger.sequence_probability(dev_x[i],dev_y[i])
+        y_pred_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pred[i])
+        y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y[i])
         if y_prob > y_pred_prob:
             print("oh no")
-            print(y_pred_prob,y_prob,i,len(dev_x[i]))
+            print(y_pred_prob,y_prob,i,len(dev_x_rare[i]))
 
         probabilities.append((y_pred_prob,y_prob))
     print(probabilities)

@@ -6,9 +6,10 @@ import copy
 import sys
 import pprint
 import re
+import csv
 from collections import OrderedDict
 
-TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
+TAGS = {'O':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
     'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
     'SYM':24,'TO':25,'UH':26,'VB':27,'VBD':28,'VBG':29,'VBN':30,'VBP':31,'VBZ':32,'WDT':33,\
     'WP':34,'WP$':35,'WRB':36, 'END':37}
@@ -28,7 +29,7 @@ def load_data(sentence_file, tag_file=None):
 
     """
     sentences = []
-    sentence = ['START']
+    sentence = ['O']
     sentences_tags = None
 
     with open(sentence_file, 'r') as x_data:
@@ -40,14 +41,15 @@ def load_data(sentence_file, tag_file=None):
             if word.strip() == '-DOCSTART-':
                 sentence.append("END")
                 sentences.append(sentence)
-                sentence = ['START']
+                sentence = ['O']
             else: 
                 sentence.append(word)
-    
+        sentence.append('END')
+        sentences.append(sentence)
     if tag_file:
         print(tag_file)
         sentences_tags = []
-        sentence_tags = ['START']
+        sentence_tags = ['O']
         with open(tag_file, 'r') as y_data:
             next(y_data)
             next(y_data)
@@ -56,9 +58,11 @@ def load_data(sentence_file, tag_file=None):
                 if tag == 'O':
                     sentence_tags.append('END')
                     sentences_tags.append(sentence_tags)
-                    sentence_tags = ['START']
+                    sentence_tags = ['O']
                 else: 
                     sentence_tags.append(tag)
+            sentence_tags.append('END')
+            sentences_tags.append(sentence_tags)
 
     return sentences, sentences_tags
 
@@ -223,7 +227,7 @@ class POSTagger():
                 if i >= n-1 and i <= l-n: 
                     ngram_labels = tuple(tag[i-n+1:i+1])
                 elif i < n-1: 
-                    ngram_labels = tuple(['START' for x in range(n-i-1)] + tag[:i+1])
+                    ngram_labels = tuple(['O' for x in range(n-i-1)] + tag[:i+1])
                     #print(str(tag[:i+1]) + " " + str(tag[i+1:n]))
                     #print(ngram_labels)
                 else:
@@ -412,8 +416,8 @@ class POSTagger():
         probabilities.
         """
         probability = np.log(1)
-        sequence = ['START']*(n-2) + sequence 
-        tags = ['START']*(n-2) + tags 
+        sequence = ['O']*(n-2) + sequence 
+        tags = ['O']*(n-2) + tags 
         if n==2:
             for i in range(1, len(sequence)):
                 probability += np.log(self.ngram_transmissions[TAGS[tags[i-1]]][TAGS[tags[i]]])
@@ -527,11 +531,10 @@ def deprune_output(original_sentences, tags):
             if sentence[i] in string.punctuation:
                 tag.insert(i,sentence[i])
 
-def deprune_data(original_tags, tags):
-    for original_tag, tag, in zip(original_tags,tags):
-        for i in range(len(original_tag)):
-            if original_tag[i] not in TAGS.keys():
-                tag.insert(i,original_tag[i])
+def deprune_output(original_tags, tags):
+    for i in range(len(original_tags)):
+        if original_tags[i] not in TAGS.keys():
+            tags.insert(i,original_tags[i])
     
 def format_output(tags):
     output = []
@@ -558,27 +561,45 @@ if __name__ == "__main__":
         if len(train_x_rare[i]) != len(train_y_pruned[i]): print(len(train_x_rare[i]), len(train_y_pruned[i]))
     dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
     dev_x_pruned, dev_y_pruned = prune_data(dev_x,dev_y)
-    # mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
     dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, 5)
+    mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
+    mini_x_pruned, mini_y_pruned = prune_data(mini_x,mini_y)
+    mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 5)
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k')
-    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
-    probabilities = []
-    for i in range(len(dev_x)):
-        y_pred_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pred[i])
-        y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pruned[i])
-        if y_prob > y_pred_prob:
-            print("oh no")
-            print(y_pred_prob,y_prob,i,len(dev_x_rare[i]))
+    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k',k=.05)
+    
+    mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
+    pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
+    pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
+    mini_y_pred_tags = format_output(mini_y_pred)
+    deprune_output(format_output(mini_y),mini_y_pred_tags)
+    print('depruned')
+    pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    # for i in range(len(mini_y_pred)):
+    #     print(len(mini_y_pred[i]),len(mini_y[i]))
+    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    # =================================================================TEST SUBOPTIMALITIES================================================================
+    # probabilities = []
+    # for i in range(len(dev_x)):
+    #     y_pred_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pred[i])
+    #     y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pruned[i])
+    #     if y_prob > y_pred_prob:
+    #         print("oh no")
+    #         print(y_pred_prob,y_prob,i,len(dev_x_rare[i]))
 
-        probabilities.append((y_pred_prob,y_prob))
-    deprune_data(dev_y,dev_y_pred)
-    dev_y_pred_tags = format_output(dev_y_pred)
-    dev_y_pred_df = pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag'])
-    dev_y_pred_df.to_csv('data/dev_y_pred.csv',index=False)
-    # rare_words_morpho(mini_x,word_counts, 5)
-    # pos_tagger.train([mini_x, mini_y], smoothing='add-k')
-    # test_beam = [pos_tagger.beam_search(sentence,3) for sentence in mini_x]
+    #     probabilities.append((y_pred_prob,y_prob))
+    #=======================================================================================================================================================
+    
+    
+    # dev_y_pred_tags = format_output(dev_y_pred)
+    # deprune_output(format_output(dev_y),dev_y_pred_tags)
+    # for i in range(len(dev_y_pred)):
+    #     if len(dev_y_pred_tags[i]) != len(dev_y[i]): print(len(dev_y_pred_tags[i]),len(dev_y[i]),i)
+    # dev_y_pred_df = pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag'])
+    # dev_y_pred_df.to_csv('data/dev_y_pred.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    # dev_y_test_df = pd.DataFrame(enumerate(format_output(dev_y)),columns=['id','tag'])
+    # dev_y_test_df.to_csv('data/dev_y_test.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    print('done')
     # print(test_beam)
     # TODO: test sub-optimalities on index 259
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)

@@ -14,6 +14,7 @@ TAGS = {'START':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS'
     'WP':34,'WP$':35,'WRB':36, 'END':37}
 TAG_IDS = {v:k for k,v in TAGS.items()}
 NUM_TAGS = len(TAGS)
+PRUNED_PUNCTUATION = '!"#\\()*+,-./:;<=>?[]^_`{|}~'
 
 
 ## ======================== Loading Data ======================== ##
@@ -59,8 +60,7 @@ def load_data(sentence_file, tag_file=None):
                 else: 
                     sentence_tags.append(tag)
 
-    if tag_file: return prune_data(sentences, sentences_tags)
-    else: return sentences, sentences_tags
+    return sentences, sentences_tags
 
 
 def prune_data(sentences, tags):
@@ -74,6 +74,11 @@ def prune_data(sentences, tags):
         pruned_sentences.append(new_sentence)
         pruned_tags.append(new_tag)
     return pruned_sentences, pruned_tags
+
+def prune_sentences(sentences):
+    pruned_sentences = [[word for word in sentence if word not in PRUNED_PUNCTUATION] for sentence in sentences]
+    return pruned_sentences
+        
 
 
 ## ======================== Smoothing ======================== ##
@@ -100,8 +105,8 @@ def rare_words_morpho_train(sentences, threshold = 5):
             word_counts[word] = word_counts.get(word,0) + 1
     processed_sentences = []
     for sentence in sentences:
+        processed_sentence = []
         for word in sentence:
-            processed_sentence = []
             if word_counts[word] < threshold: # from https://stathwang.github.io/part-of-speech-tagging-with-trigram-hidden-markov-models-and-the-viterbi-algorithm.html     
                 if not re.search(r'\w', word): 
                     processed_sentence.append('_PUNCS_')
@@ -179,7 +184,7 @@ class POSTagger():
     def __init__(self):
         """Initializes the tagger model parameters and anything else necessary. """
         #trigram_transmissions = np.zeros(NUM_TAGS,NUM_TAGS,NUM_TAGS) # q(C|A,B) = t_t[id[A],id[B],id[C]]
-        trigram_transmissions = None
+        ngram_transmissions = None
         emissions = None
         word_encodings = None
 
@@ -227,7 +232,8 @@ class POSTagger():
                     #print(ngram_labels)
                 
                 assert(len(ngram_labels) == n)
-                labels = tuple([TAGS[t] for t in ngram_labels])
+                if(n==1): labels = TAGS[ngram_labels[0]]
+                else: labels = tuple([TAGS[t] for t in ngram_labels])
                 counter[labels] = counter.get(labels, 0) + 1
 
         #pprint.pprint(counter)
@@ -250,66 +256,118 @@ class POSTagger():
         return counter
 
 
-    def get_transmissions(self, data):
+    def get_transmissions(self, data, n = 3):
         """
         @return: n-d array representing transmission matrix 
                 q(s|u,v) = c(u,v,s) / c(u,v)  => arr[u,v,s]
         """        
-        trigrams = self.ngram_counter(data[0], data[1], 3)
-        bigrams = self.ngram_counter(data[0], data[1], 2)
-        trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
-
-        for u in range(NUM_TAGS):
-            for v in range(NUM_TAGS):
-                c_uv = bigrams.get((u,v), 0)     # TODO: How to deal with 0 values 
-                for s in range(NUM_TAGS):
-                    c_uvs = trigrams.get((u,v,s), 0) 
-                    trans_matrix[u][v][s] = c_uvs / c_uv if c_uv != 0 else 0
-
+        matrix_shape = tuple(NUM_TAGS for i in range(n))
+        trans_matrix = np.zeros(matrix_shape)
+        ngrams = [self.ngram_counter(data[0],data[1],i) for i in range(1,n+1)]
+        if n==2:
+            for u in range(NUM_TAGS):
+                c_u = ngrams[0].get((u),0)
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)
+                    trans_matrix[u][v] = c_uv / c_u if c_u != 0 else 0
+        elif n==3:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)     
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        trans_matrix[u][v][s] = c_uvs / c_uv if c_uv != 0 else 0
+        elif n==4:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        for w in range(NUM_TAGS):
+                            c_uvsw = ngrams[3].get((u,v,s,w),0)
+                            trans_matrix[u][v][s][w] = c_uvsw / c_uvs if c_uvs != 0 else 0
         #print(trans_matrix)
         return trans_matrix
 
 
-    def get_transmissions_add_k(self, data, k):
-        trigrams = self.ngram_counter(data[0], data[1], 3)
-        bigrams = self.ngram_counter(data[0], data[1], 2)
-        trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
-
-        for u in range(NUM_TAGS):
-            for v in range(NUM_TAGS):
-                c_uv = bigrams.get((u,v), 0)     
-                for s in range(NUM_TAGS):
-                    c_uvs = trigrams.get((u,v,s), 0) 
-                    trans_matrix[u][v][s] = (c_uvs+k) / (c_uv+k*NUM_TAGS*NUM_TAGS) #add k to numerator, k*number of possible bigrams to denominator
-
-        #print(trans_matrix)
+    def get_transmissions_add_k(self, data, k, n=3):
+        matrix_shape = tuple(NUM_TAGS for i in range(n))
+        trans_matrix = np.zeros(matrix_shape)
+        ngrams = [self.ngram_counter(data[0],data[1],i) for i in range(1,n+1)]
+        if n==2:
+            for u in range(NUM_TAGS):
+                c_u = ngrams[0].get((u),0)
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)
+                    trans_matrix[u][v] = (c_uv+k) / (c_u+k**(n-1))
+        elif n==3:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)     
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        trans_matrix[u][v][s] = (c_uvs+k) / (c_uv+k*NUM_TAGS**(n-1))
+        elif n==4:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        for w in range(NUM_TAGS):
+                            c_uvsw = ngrams[3].get((u,v,s,w),0)
+                            trans_matrix[u][v][s][w] = (c_uvsw+k) / (c_uvs+k*NUM_TAGS**(n-1))
         return trans_matrix
 
-    def get_transmissions_linear_interpolation(self, data, l1, l2):
+    def get_transmissions_linear_interpolation(self, data, l_values, n=3):
         """
         @params: 
             -data: sentences, tags
-            -l1: weight for trigram
-            -l2: weight for bigram
+            -l_values [l1, l2,...] of length n-1
             -l1,l2>=0, l1+l2<=1
 
         """
-        trigrams = self.ngram_counter(data[0], data[1], 3)
-        bigrams = self.ngram_counter(data[0], data[1], 2)
-        unigrams = self.ngram_counter(data[0],data[1],1)
-        trans_matrix = np.zeros((NUM_TAGS,NUM_TAGS,NUM_TAGS))
-
-        for u in range(NUM_TAGS):
-            for v in range(NUM_TAGS):
-                c_uv = bigrams.get((u,v), 0)
-                c_vs = bigrams.get((v,s),0)
-                c_v = unigrams.get((v),0)
-                for s in range(NUM_TAGS):
-                    c_uvs = trigrams.get((u,v,s), 0) 
-                    trigram_transmission = c_uvs / c_uv if c_uv != 0 else 0
-                    bigram_transmission = c_vs / c_v if c_v != 0 else 0
-                    unigram_transmission = c_v / len(data[1]) #I think this is right but not 100% sure
-                    trans_matrix[u][v][s] = l1* trigram_transmission + l2 * bigram_transmission + (1-l1-l2) * unigram_transmission
+        matrix_shape = tuple(NUM_TAGS for i in range(n))
+        trans_matrix = np.zeros(matrix_shape)
+        ngrams = [self.ngram_counter(data[0],data[1],i) for i in range(1,n+1)]
+        if n==2:
+            for u in range(NUM_TAGS):
+                c_u = ngrams[0].get((u),0)
+                for v in range(NUM_TAGS):
+                    c_v = ngrams[0].get((v),0)
+                    c_uv = ngrams[1].get((u,v), 0)
+                    bigram_transmission = c_uv / c_u if c_u != 0 else 0
+                    unigram_transmission = c_v / len(data[1])
+                    trans_matrix[u][v] = l_values[0]* bigram_transmission + (1-sum(l_values)) * unigram_transmission
+        elif n==3:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)
+                    c_v = ngrams[0].get((v),0)
+                    for s in range(NUM_TAGS):
+                        c_s = ngrams[0].get((s),0)
+                        c_vs = ngrams[1].get((v,s),0)
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        trigram_transmission = c_uvs / c_uv if c_uv != 0 else 0
+                        bigram_transmission = c_vs / c_v if c_v != 0 else 0
+                        unigram_transmission = c_s / len(data[1]) #I think this is right but not 100% sure
+                        trans_matrix[u][v][s] = l_values[0]* trigram_transmission + l_values[1] * bigram_transmission + (1-sum(l_values)) * unigram_transmission
+        elif n==4:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)
+                    c_v = ngrams[0].get((v),0)
+                    for s in range(NUM_TAGS):
+                        c_s = ngrams[0].get((s),0)
+                        c_vs = ngrams[1].get((v,s),0)
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        for w in range(NUM_TAGS):
+                            c_uvsw = ngrams[3].get((u,v,s,w),0)
+                            c_vsw = ngrams[2].get((v,s,w),0)
+                            c_sw = ngrams[1].get((s,w),0)
+                            c_w = ngrams[0].get((w),0)
+                            fourgram_transmission = c_uvsw / c_uvs if c_uvs != 0 else 0
+                            trigram_transmission = c_vsw / c_vs if c_vs != 0 else 0
+                            bigram_transmission = c_sw / c_s if c_s != 0 else 0
+                            unigram_transmission = c_w / len(data[1]) #I think this is right but not 100% sure
+                            trans_matrix[u][v][s][w] = l_values[0]* fourgram_transmission + l_values[1] * trigram_transmission + l_values[2] * bigram_transmission + (1-sum(l_values)) * unigram_transmission
 
         #print(trans_matrix)
         return trans_matrix
@@ -330,35 +388,45 @@ class POSTagger():
             for word, label in zip(sentence, tag):
                 x = self.word_encodings[word]
                 s = TAGS[label]
-                emission_matrix[x][s] = tag_assignment.get((word,s), 0) / unigram[tuple([s])]
+                emission_matrix[x][s] = tag_assignment.get((word,s), 0) / unigram[(s)]
         #print(emission_matrix)
         return emission_matrix
 
 
-    def train(self, data, smoothing = 'None', k=.3, l1=.5, l2=.3):
+    def train(self, data, smoothing = 'None', n = 3, k=.3, l_values=[.5,.3]):
         """Trains the model by computing transition and emission probabilities.
         Set transmission and emission matrix with customized smoothing techniques       
         """
         if smoothing == 'add-k':
-            self.trigram_transmissions = self.get_transmissions_add_k(data,k)
+            self.ngram_transmissions = self.get_transmissions_add_k(data,k,n)
         elif smoothing == 'linear_interpolation':
-            self.trigram_transmissions = self.get_transmissions_linear_interpolation(data,l1,l2)
+            self.ngram_transmissions = self.get_transmissions_linear_interpolation(data, l_values, n)
         else: 
-            self.trigram_transmissions = self.get_transmissions(data)
+            self.ngram_transmissions = self.get_transmissions(data,n)
         
         self.emissions = self.get_emissions(data)
 
 
-    def sequence_probability(self, sequence, tags):
+    def sequence_probability(self, sequence, tags, n=3):
         """Computes the probability of a tagged sequence given the emission/transition
         probabilities.
         """
         probability = np.log(1)
-        sequence = ['START'] + sequence 
-        tags = ['START'] + tags 
-        for i in range(2, len(sequence)):
-            probability += np.log(self.trigram_transmissions[TAGS[tags[i-2]]][TAGS[tags[i-1]]][TAGS[tags[i]]])
-            probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
+        sequence = ['START']*(n-2) + sequence 
+        tags = ['START']*(n-2) + tags 
+        if n==2:
+            for i in range(1, len(sequence)):
+                probability += np.log(self.ngram_transmissions[TAGS[tags[i-1]]][TAGS[tags[i]]])
+                probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
+
+        elif n==3:
+            for i in range(2, len(sequence)):
+                probability += np.log(self.ngram_transmissions[TAGS[tags[i-2]]][TAGS[tags[i-1]]][TAGS[tags[i]]])
+                probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
+        elif n==4:
+            for i in range(3, len(sequence)):
+                probability += np.log(self.ngram_transmissions[TAGS[tags[i-3]]][TAGS[tags[i-2]]][TAGS[tags[i-1]]][TAGS[tags[i]]])
+                probability += np.log(self.emissions[self.word_encodings[sequence[i]]][TAGS[tags[i]]])
 
         return probability
 
@@ -387,7 +455,7 @@ class POSTagger():
                 u = index // NUM_TAGS
                 v = index % NUM_TAGS
                 for i in range(NUM_TAGS):
-                    new_pi = pi + np.log(self.trigram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                    new_pi = pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
                     new_indices.append(v*NUM_TAGS + i)
                     new_pis.append(new_pi)
             
@@ -408,35 +476,26 @@ class POSTagger():
         backpointers = np.zeros((NUM_TAGS**2, len(sequence)))
         lattice[0][0] = 1 #u,v,k -> NUM_TAGS*u+v,k
         lattice = np.log(lattice)
-        nonzero_indices = [0] #keep track of the nonzero pi values from the previous time step
+        nonzero_indices = [0] #keep track of the indices with nonzero pi values from the previous time step
         for k in range(1,len(sequence)):
-            maxes = {} #highest pi values and path for each tag
+            maxes = {} #keep track of nonzero pi for current step
             for index in nonzero_indices:
                 u = index // NUM_TAGS
                 v = index % NUM_TAGS
                 prev_pi = lattice[index,k-1]
                 # print(prev_pi)
-                i_max =  np.NINF
-                max_tag = -1
                 for i in range(NUM_TAGS):
                     # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
-                    pi = prev_pi + np.log(self.trigram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                    pi = prev_pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
                     if pi > np.NINF:
-                        # i_max = pi 
-                        # max_tag = i
                         if(v, i) not in maxes.keys():
                             maxes[(v,i)] = [(u, pi)]
                         else:
                             maxes[(v,i)].append((u,pi))
 
-                # if i_max> np.NINF:
-                #     if (v, max_tag) not in maxes.keys():
-                #         maxes[(v,max_tag)] = [(u,i_max)]
-                #     else:
-                #         maxes[(v,max_tag)].append((u,i_max))
             nonzero_indices = []
             # print(maxes)
-            for (v,w) in maxes.keys(): #find best path for each node and 
+            for (v,w) in maxes.keys(): #find best path for each node and update the lattice and backpointers
                 best_path = max(maxes[(v,w)], key=lambda x: x[1])
                 # print(best_path)
                 u = best_path[0] 
@@ -462,11 +521,25 @@ class POSTagger():
         tag_strings = [TAG_IDS[tag] for tag in tags]
         return tag_strings
 
-def clean_output(original_sentences, sentences, tags):
+def deprune_output(original_sentences, tags):
     for sentence, tag in zip(original_sentences, tags):
         for i in range(len(sentence)):
             if sentence[i] in string.punctuation:
-                tags.insert(i,sentence[i])
+                tag.insert(i,sentence[i])
+
+def deprune_data(original_tags, tags):
+    for original_tag, tag, in zip(original_tags,tags):
+        for i in range(len(original_tag)):
+            if original_tag[i] not in TAGS.keys():
+                tag.insert(i,original_tag[i])
+    
+def format_output(tags):
+    output = []
+    tag_list = [tag for line in tags for tag in line if tag != 'END']
+    for i in range(len(tag_list)):
+        if tag_list[i] == 'START':
+            tag_list[i] = 'O'
+    return tag_list
 
 
 
@@ -479,24 +552,30 @@ if __name__ == "__main__":
     # 
 
     train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
-    train_x_rare, word_counts = rare_words_morpho_train(train_x)
+    train_x_pruned, train_y_pruned = prune_data(train_x, train_y)
+    train_x_rare, word_counts = rare_words_morpho_train(train_x_pruned)
+    for i in range(len(train_x_rare)):
+        if len(train_x_rare[i]) != len(train_y_pruned[i]): print(len(train_x_rare[i]), len(train_y_pruned[i]))
     dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
+    dev_x_pruned, dev_y_pruned = prune_data(dev_x,dev_y)
     # mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
-    dev_x_rare = rare_words_morpho(dev_x,word_counts, 5)
-
+    dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, 5)
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y], smoothing='linear interpolation')
+    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k')
     dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
     probabilities = []
     for i in range(len(dev_x)):
         y_pred_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pred[i])
-        y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y[i])
+        y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pruned[i])
         if y_prob > y_pred_prob:
             print("oh no")
             print(y_pred_prob,y_prob,i,len(dev_x_rare[i]))
 
         probabilities.append((y_pred_prob,y_prob))
-    print(probabilities)
+    deprune_data(dev_y,dev_y_pred)
+    dev_y_pred_tags = format_output(dev_y_pred)
+    dev_y_pred_df = pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag'])
+    dev_y_pred_df.to_csv('data/dev_y_pred.csv',index=False)
     # rare_words_morpho(mini_x,word_counts, 5)
     # pos_tagger.train([mini_x, mini_y], smoothing='add-k')
     # test_beam = [pos_tagger.beam_search(sentence,3) for sentence in mini_x]

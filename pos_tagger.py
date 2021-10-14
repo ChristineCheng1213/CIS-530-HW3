@@ -7,7 +7,12 @@ import sys
 import pprint
 import re
 import csv
-from collections import OrderedDict
+from collections import Counter
+
+# TODO:
+#     - update beam search bigram
+#     - split by sentence 
+#     - smoothing (?)
 
 TAGS = {'O':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'LS':10,'MD':11,'NN':12,\
     'NNS':13,'NNP':14,'NNPS':15,'PDT':16,'POS':17,'PRP':18,'PRP$':19,'RB':20,'RBR':21,'RBS':22,'RP':23,\
@@ -15,7 +20,7 @@ TAGS = {'O':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'
     'WP':34,'WP$':35,'WRB':36, 'END':37}
 TAG_IDS = {v:k for k,v in TAGS.items()}
 NUM_TAGS = len(TAGS)
-PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
+#PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
 PUNCTUATION_TAGS = {'#':'#','\'\'':'\'\'','(':'(','{':'(',')':')','}':')',',':',','!':'.','.':'.','?':'.','-':':','--':':','...':':',':':':',';':':','`':'``','``':'``','non-``':'``'}
 
 
@@ -352,6 +357,7 @@ class POSTagger():
                             trans_matrix[u][v][s][w] = (c_uvsw+k) / (c_uvs+k*NUM_TAGS**(n-1))
         return trans_matrix
 
+
     def get_transmissions_linear_interpolation(self, data, l_values, n=3):
         """
         @params: 
@@ -479,7 +485,7 @@ class POSTagger():
         """
         return []
 
-    def beam_search(self, sequence, K=1): 
+    def beam_search(self, sequence, K=1, n=3): 
         prev_indices = [0]
         prev_pis = [0]
         assigned_tags = [0]

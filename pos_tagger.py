@@ -293,6 +293,37 @@ class POSTagger():
         #print(trans_matrix)
         return trans_matrix
 
+    def get_transmissions_good_turing(self, data, n=3): 
+        matrix_shape = tuple(NUM_TAGS for i in range(n))
+        trans_matrix = np.zeros(matrix_shape)
+        ngrams = []
+        for i in range(1,n+1):
+            igram_counter = self.ngram_counter(data[0], data[1], i)
+            igram_freq = Counter(igram_counter.values())
+            igram_smoothed = { x : (igram_counter[x]+1) * igram_freq[(igram_counter[x]+1)] / igram_freq[igram_counter[x]] for x in igram_counter.keys() }
+            ngrams.append(igram_smoothed)
+        if n==2:
+            for u in range(NUM_TAGS):
+                c_u = ngrams[0].get((u),0)
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)
+                    trans_matrix[u][v] = c_uv / c_u if c_u != 0 else 0
+        elif n==3:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    c_uv = ngrams[1].get((u,v), 0)     
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        trans_matrix[u][v][s] = c_uvs / c_uv if c_uv != 0 else 0
+        elif n==4:
+            for u in range(NUM_TAGS):
+                for v in range(NUM_TAGS):
+                    for s in range(NUM_TAGS):
+                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        for w in range(NUM_TAGS):
+                            c_uvsw = ngrams[3].get((u,v,s,w),0)
+                            trans_matrix[u][v][s][w] = c_uvsw / c_uvs if c_uvs != 0 else 0
+        return trans_matrix     
 
     def get_transmissions_add_k(self, data, k, n=3):
         matrix_shape = tuple(NUM_TAGS for i in range(n))

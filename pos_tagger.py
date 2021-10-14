@@ -15,7 +15,8 @@ TAGS = {'O':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'
     'WP':34,'WP$':35,'WRB':36, 'END':37}
 TAG_IDS = {v:k for k,v in TAGS.items()}
 NUM_TAGS = len(TAGS)
-PRUNED_PUNCTUATION = '!"#\\()*+,-./:;<=>?[]^_`{|}~'
+PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
+PUNCTUATION_TAGS = {'#':'#','\'\'':'\'\'','(':'(','{':'(',')':')','}':')',',':',','!':'.','.':'.','?':'.','-':':','--':':','...':':',':':':',';':':','`':'``','``':'``','non-``':'``'}
 
 
 ## ======================== Loading Data ======================== ##
@@ -80,7 +81,7 @@ def prune_data(sentences, tags):
     return pruned_sentences, pruned_tags
 
 def prune_sentences(sentences):
-    pruned_sentences = [[word for word in sentence if word not in PRUNED_PUNCTUATION] for sentence in sentences]
+    pruned_sentences = [[word for word in sentence if (word not in PUNCTUATION_TAGS.keys()) and not "$" in word] for sentence in sentences]
     return pruned_sentences
         
 
@@ -531,18 +532,31 @@ def deprune_output(original_sentences, tags):
             if sentence[i] in string.punctuation:
                 tag.insert(i,sentence[i])
 
-def deprune_output(original_tags, tags):
+def deprune_formatted_output(original_tags, tags):
     for i in range(len(original_tags)):
         if original_tags[i] not in TAGS.keys():
             tags.insert(i,original_tags[i])
-    
+
+def deprune_formatted_output_from_sentences(original_sentences, tags):
+    for i in range(len(original_sentences)):
+        if original_sentences[i] in PUNCTUATION_TAGS.keys():
+            tags.insert(i,PUNCTUATION_TAGS[original_sentences[i]])
+        elif "$" in original_sentences[i]: 
+            tags.insert(i,"$")
+
 def format_output(tags):
-    output = []
     tag_list = [tag for line in tags for tag in line if tag != 'END']
     for i in range(len(tag_list)):
         if tag_list[i] == 'START':
             tag_list[i] = 'O'
     return tag_list
+
+def format_output_sentences(sentences):
+    words = [word for line in sentences for word in line if word != 'END']
+    for i in range(len(words)):
+        if words[i] == 'START':
+            words[i] = '-DOCSTART-'
+    return words
 
 
 
@@ -550,7 +564,7 @@ def format_output(tags):
 
 
 if __name__ == "__main__":
-    # TODO: update rare word script to not work in-place
+    # TODO: compare pruning techniques
     # figure out punctuation cleaning without tags?
     # 
 
@@ -563,17 +577,19 @@ if __name__ == "__main__":
     dev_x_pruned, dev_y_pruned = prune_data(dev_x,dev_y)
     dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, 5)
     mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
-    mini_x_pruned, mini_y_pruned = prune_data(mini_x,mini_y)
+    mini_x_pruned = prune_sentences(mini_x)
     mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 5)
     pos_tagger = POSTagger()
     pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k',k=.05)
-    
+
     mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
     pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
     mini_y_pred_tags = format_output(mini_y_pred)
-    deprune_output(format_output(mini_y),mini_y_pred_tags)
+    print(len(mini_y_pred_tags))
+    deprune_formatted_output_from_sentences(format_output_sentences(mini_x),mini_y_pred_tags)
     print('depruned')
+    print(len(mini_y_pred_tags))
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
@@ -601,7 +617,6 @@ if __name__ == "__main__":
     # dev_y_test_df.to_csv('data/dev_y_test.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     print('done')
     # print(test_beam)
-    # TODO: test sub-optimalities on index 259
     #pos_tagger.ngram_counter(train_data[0],train_data[1], 3)
     #pos_tagger.tag_assignment_counter(train_data[0], train_data[1])
 

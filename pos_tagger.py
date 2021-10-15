@@ -556,58 +556,76 @@ class POSTagger():
         return [TAG_IDS[tag] for tag in assigned_tags]
 
 
-    def viterbi(self, sequence):
+    def viterbi(self, sequence, n=3):
         """Generates tags through Viterbi algorithm
         
         """
-        # print(sequence)
-        lattice = np.zeros((NUM_TAGS**2,len(sequence)))
-        backpointers = np.zeros((NUM_TAGS**2, len(sequence)))
+        lattice = np.zeros((NUM_TAGS**(n-1),len(sequence)))
+        backpointers = np.zeros((NUM_TAGS**(n-1), len(sequence)))
         lattice[0][0] = 1 #u,v,k -> NUM_TAGS*u+v,k
         lattice = np.log(lattice)
         nonzero_indices = [0] #keep track of the indices with nonzero pi values from the previous time step
-        for k in range(1,len(sequence)):
-            maxes = {} #keep track of nonzero pi for current step
-            for index in nonzero_indices:
-                u = index // NUM_TAGS
-                v = index % NUM_TAGS
-                prev_pi = lattice[index,k-1]
-                # print(prev_pi)
-                for i in range(NUM_TAGS):
-                    # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
-                    pi = prev_pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
-                    if pi > np.NINF:
-                        if(v, i) not in maxes.keys():
-                            maxes[(v,i)] = [(u, pi)]
-                        else:
-                            maxes[(v,i)].append((u,pi))
+        if n==3:
+            for k in range(1,len(sequence)):
+                maxes = {} #keep track of nonzero pi for current step
+                for index in nonzero_indices:
+                    u = index // NUM_TAGS
+                    v = index % NUM_TAGS
+                    prev_pi = lattice[index,k-1]
+                    for i in range(NUM_TAGS):
+                        # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
+                        pi = prev_pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                        if pi > np.NINF:
+                            if(v, i) not in maxes.keys():
+                                maxes[(v,i)] = [(u, pi)]
+                            else:
+                                maxes[(v,i)].append((u,pi))
 
-            nonzero_indices = []
-            # print(maxes)
-            for (v,w) in maxes.keys(): #find best path for each node and update the lattice and backpointers
-                best_path = max(maxes[(v,w)], key=lambda x: x[1])
-                # print(best_path)
-                u = best_path[0] 
-                lattice[v*NUM_TAGS+w][k] = best_path[1]
-                backpointers[v*NUM_TAGS+w][k] = u*NUM_TAGS+v
-                if best_path[1]>np.NINF:
-                    nonzero_indices.append(v*NUM_TAGS+w)
-            # print(nonzero_indices)
-        endpoints = []
-        for i in range(NUM_TAGS-1,NUM_TAGS**2-1,NUM_TAGS):
-            endpoints.append((i,lattice[i,len(sequence)-1]))
-        # print(endpoints)
-        best_endpoint = max(endpoints, key= lambda x: x[1])
-        # print(best_endpoint)
-        # print(lattice)
-        np.savetxt('lattice.csv',lattice,delimiter=',')
-        # print(backpointers)
-        tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
-        for k in range(len(sequence)-1,1,-1):
-            # print(tags)
-            prev_index = int(backpointers[tags[0]*NUM_TAGS+tags[1]][k])
-            tags.insert(0,prev_index//NUM_TAGS)
-        tag_strings = [TAG_IDS[tag] for tag in tags]
+                nonzero_indices = []
+                for (v,w) in maxes.keys(): #find best path for each node and update the lattice and backpointers
+                    best_path = max(maxes[(v,w)], key=lambda x: x[1])
+                    u = best_path[0] 
+                    lattice[v*NUM_TAGS+w][k] = best_path[1]
+                    backpointers[v*NUM_TAGS+w][k] = u*NUM_TAGS+v
+                    if best_path[1]>np.NINF:
+                        nonzero_indices.append(v*NUM_TAGS+w)
+            endpoints = []
+            for i in range(NUM_TAGS-1,NUM_TAGS**2-1,NUM_TAGS):
+                endpoints.append((i,lattice[i,len(sequence)-1]))
+            best_endpoint = max(endpoints, key= lambda x: x[1])
+            np.savetxt('lattice.csv',lattice,delimiter=',')
+            tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
+            for k in range(len(sequence)-1,1,-1):
+                prev_index = int(backpointers[tags[0]*NUM_TAGS+tags[1]][k])
+                tags.insert(0,prev_index//NUM_TAGS)
+            tag_strings = [TAG_IDS[tag] for tag in tags]
+        elif n==2:
+            for k in range(1,len(sequence)):
+                maxes = {} #keep track of nonzero pi for current step
+                for u in nonzero_indices:
+                    prev_pi = lattice[u,k-1]
+                    for v in range(NUM_TAGS):
+                        # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
+                        pi = prev_pi + np.log(self.ngram_transmissions[u][v]) + np.log(self.emissions[self.word_encodings[sequence[k]]][v])
+                        if pi > np.NINF:
+                            if v not in maxes.keys():
+                                maxes[v] = [(u, pi)]
+                            else:
+                                maxes[v].append((u,pi))
+
+                nonzero_indices = []
+                for v in maxes.keys(): #find best path for each node and update the lattice and backpointers
+                    best_path = max(maxes[v], key=lambda x: x[1])
+                    u = best_path[0] 
+                    lattice[v][k] = best_path[1]
+                    backpointers[v][k] = u
+                    if best_path[1]>np.NINF:
+                        nonzero_indices.append(v)
+            tags = [NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
+            for k in range(len(sequence)-1,1,-1):
+                prev_index = int(backpointers[tags[0]][k])
+                tags.insert(0,prev_index)
+            tag_strings = [TAG_IDS[tag] for tag in tags]
         return tag_strings
 
 def deprune_output(original_sentences, tags):

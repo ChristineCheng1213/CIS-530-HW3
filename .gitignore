@@ -1,1 +1,4 @@
 mini_test_x.csv
+mini_*_*.csv
+lattice.csv
+dev_y_pred_tags.csv

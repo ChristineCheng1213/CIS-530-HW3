@@ -20,6 +20,8 @@ PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
 PUNCTUATION_TAGS = {'#':'#','\'\'':'\'\'','(':'(','{':'(',')':')','}':')',',':',','!':'.','.':'.','?':'.','-':':','--':':','...':':',':':':',';':':','`':'``','``':'``','non-``':'``'}
 PERIOD_TAGS = ['.', '!', '?']
 
+## ======================== Loading Data ======================== ##
+
 def load_data(sentence_file, tag_file=None):
     sentences = []
     sentence = ['O']
@@ -78,6 +80,7 @@ def load_data_split(sentence_file, tag_file=None):
                 tag = line2.split(',',1)[1].strip()[1:-1]
                 print(tag)
                 if word.strip() == '-DOCSTART-':
+
                     if len(sentence) == 1 and sentence[-1] == 'O': continue 
                     else:
                         sentence.append("END")
@@ -351,35 +354,38 @@ class POSTagger():
         #print(trans_matrix)
         return trans_matrix
 
+    def turingfy(self, c, freq):
+        #return 0 if c not in freq.keys() else (c+1) * freq.get((c+1),freq.get(c)) / freq.get(c)
+        return c
+
     def get_transmissions_good_turing(self, data, n=3): 
         matrix_shape = tuple(NUM_TAGS for i in range(n))
         trans_matrix = np.zeros(matrix_shape)
-        ngrams = []
-        for i in range(1,n+1):
-            igram_counter = self.ngram_counter(data[0], data[1], i)
-            igram_freq = Counter(igram_counter.values())
-            igram_smoothed = { x : (igram_counter[x]+1) * igram_freq[(igram_counter[x]+1)] / igram_freq[igram_counter[x]] for x in igram_counter.keys() }
-            ngrams.append(igram_smoothed)
+        ngrams = [self.ngram_counter(data[0],data[1],i) for i in range(1,n+1)]
+        ngrams_freq = []
+        for i in range(len(ngrams)):
+            ngrams_freq.append(Counter(ngrams[i].values()))
+
         if n==2:
             for u in range(NUM_TAGS):
-                c_u = ngrams[0].get((u),0)
+                c_u = self.turingfy(ngrams[0].get((u),0), ngrams_freq[0])
                 for v in range(NUM_TAGS):
-                    c_uv = ngrams[1].get((u,v), 0)
+                    c_uv = self.turingfy(ngrams[1].get((u,v),0), ngrams_freq[1])
                     trans_matrix[u][v] = c_uv / c_u if c_u != 0 else 0
         elif n==3:
             for u in range(NUM_TAGS):
                 for v in range(NUM_TAGS):
-                    c_uv = ngrams[1].get((u,v), 0)     
+                    c_uv = self.turingfy(ngrams[1].get((u,v),0), ngrams_freq[1])
                     for s in range(NUM_TAGS):
-                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        c_uvs = self.turingfy(ngrams[2].get((u,v,s),0), ngrams_freq[2])
                         trans_matrix[u][v][s] = c_uvs / c_uv if c_uv != 0 else 0
         elif n==4:
             for u in range(NUM_TAGS):
                 for v in range(NUM_TAGS):
                     for s in range(NUM_TAGS):
-                        c_uvs = ngrams[2].get((u,v,s), 0) 
+                        c_uvs = self.turingfy(ngrams[2].get((u,v,s),0), ngrams_freq[2])
                         for w in range(NUM_TAGS):
-                            c_uvsw = ngrams[3].get((u,v,s,w),0)
+                            c_uvsw = self.turingfy(ngrams[3].get((u,v,s,w),0), ngrams_freq[3])
                             trans_matrix[u][v][s][w] = c_uvsw / c_uvs if c_uvs != 0 else 0
         return trans_matrix     
 
@@ -540,7 +546,7 @@ class POSTagger():
         """
         return []
 
-    def beam_search(self, sequence, K=1, n=3): 
+    def beam_search(self, sequence, K=1): 
         prev_indices = [0]
         prev_pis = [0]
         assigned_tags = [0]
@@ -580,76 +586,58 @@ class POSTagger():
         return [TAG_IDS[tag] for tag in assigned_tags]
 
 
-    def viterbi(self, sequence, n=3):
+    def viterbi(self, sequence):
         """Generates tags through Viterbi algorithm
         
         """
-        lattice = np.zeros((NUM_TAGS**(n-1),len(sequence)))
-        backpointers = np.zeros((NUM_TAGS**(n-1), len(sequence)))
+        # print(sequence)
+        lattice = np.zeros((NUM_TAGS**2,len(sequence)))
+        backpointers = np.zeros((NUM_TAGS**2, len(sequence)))
         lattice[0][0] = 1 #u,v,k -> NUM_TAGS*u+v,k
         lattice = np.log(lattice)
         nonzero_indices = [0] #keep track of the indices with nonzero pi values from the previous time step
-        if n==3:
-            for k in range(1,len(sequence)):
-                maxes = {} #keep track of nonzero pi for current step
-                for index in nonzero_indices:
-                    u = index // NUM_TAGS
-                    v = index % NUM_TAGS
-                    prev_pi = lattice[index,k-1]
-                    for i in range(NUM_TAGS):
-                        # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
-                        pi = prev_pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
-                        if pi > np.NINF:
-                            if(v, i) not in maxes.keys():
-                                maxes[(v,i)] = [(u, pi)]
-                            else:
-                                maxes[(v,i)].append((u,pi))
+        for k in range(1,len(sequence)):
+            maxes = {} #keep track of nonzero pi for current step
+            for index in nonzero_indices:
+                u = index // NUM_TAGS
+                v = index % NUM_TAGS
+                prev_pi = lattice[index,k-1]
+                # print(prev_pi)
+                for i in range(NUM_TAGS):
+                    # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
+                    pi = prev_pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                    if pi > np.NINF:
+                        if(v, i) not in maxes.keys():
+                            maxes[(v,i)] = [(u, pi)]
+                        else:
+                            maxes[(v,i)].append((u,pi))
 
-                nonzero_indices = []
-                for (v,w) in maxes.keys(): #find best path for each node and update the lattice and backpointers
-                    best_path = max(maxes[(v,w)], key=lambda x: x[1])
-                    u = best_path[0] 
-                    lattice[v*NUM_TAGS+w][k] = best_path[1]
-                    backpointers[v*NUM_TAGS+w][k] = u*NUM_TAGS+v
-                    if best_path[1]>np.NINF:
-                        nonzero_indices.append(v*NUM_TAGS+w)
-            endpoints = []
-            for i in range(NUM_TAGS-1,NUM_TAGS**2-1,NUM_TAGS):
-                endpoints.append((i,lattice[i,len(sequence)-1]))
-            best_endpoint = max(endpoints, key= lambda x: x[1])
-            np.savetxt('lattice.csv',lattice,delimiter=',')
-            tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
-            for k in range(len(sequence)-1,1,-1):
-                prev_index = int(backpointers[tags[0]*NUM_TAGS+tags[1]][k])
-                tags.insert(0,prev_index//NUM_TAGS)
-            tag_strings = [TAG_IDS[tag] for tag in tags]
-        elif n==2:
-            for k in range(1,len(sequence)):
-                maxes = {} #keep track of nonzero pi for current step
-                for u in nonzero_indices:
-                    prev_pi = lattice[u,k-1]
-                    for v in range(NUM_TAGS):
-                        # print(f"pi = {prev_pi} + {np.log(self.trigram_transmissions[u][v][i])} + {np.log(self.emissions[self.word_encodings[sequence[k]]][i])}")
-                        pi = prev_pi + np.log(self.ngram_transmissions[u][v]) + np.log(self.emissions[self.word_encodings[sequence[k]]][v])
-                        if pi > np.NINF:
-                            if v not in maxes.keys():
-                                maxes[v] = [(u, pi)]
-                            else:
-                                maxes[v].append((u,pi))
-
-                nonzero_indices = []
-                for v in maxes.keys(): #find best path for each node and update the lattice and backpointers
-                    best_path = max(maxes[v], key=lambda x: x[1])
-                    u = best_path[0] 
-                    lattice[v][k] = best_path[1]
-                    backpointers[v][k] = u
-                    if best_path[1]>np.NINF:
-                        nonzero_indices.append(v)
-            tags = [NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
-            for k in range(len(sequence)-1,0,-1):
-                prev_index = int(backpointers[tags[0]][k])
-                tags.insert(0,prev_index)
-            tag_strings = [TAG_IDS[tag] for tag in tags]
+            nonzero_indices = []
+            # print(maxes)
+            for (v,w) in maxes.keys(): #find best path for each node and update the lattice and backpointers
+                best_path = max(maxes[(v,w)], key=lambda x: x[1])
+                # print(best_path)
+                u = best_path[0] 
+                lattice[v*NUM_TAGS+w][k] = best_path[1]
+                backpointers[v*NUM_TAGS+w][k] = u*NUM_TAGS+v
+                if best_path[1]>np.NINF:
+                    nonzero_indices.append(v*NUM_TAGS+w)
+            # print(nonzero_indices)
+        endpoints = []
+        for i in range(NUM_TAGS-1,NUM_TAGS**2-1,NUM_TAGS):
+            endpoints.append((i,lattice[i,len(sequence)-1]))
+        # print(endpoints)
+        best_endpoint = max(endpoints, key= lambda x: x[1])
+        # print(best_endpoint)
+        # print(lattice)
+        np.savetxt('lattice.csv',lattice,delimiter=',')
+        # print(backpointers)
+        tags = [best_endpoint[0]//NUM_TAGS,NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
+        for k in range(len(sequence)-1,1,-1):
+            # print(tags)
+            prev_index = int(backpointers[tags[0]*NUM_TAGS+tags[1]][k])
+            tags.insert(0,prev_index//NUM_TAGS)
+        tag_strings = [TAG_IDS[tag] for tag in tags]
         return tag_strings
 
 def deprune_output(original_sentences, tags):
@@ -690,9 +678,9 @@ def format_output_sentences(sentences):
 
 
 if __name__ == "__main__":
-    # TODO: compare pruning techniques
-    # figure out punctuation cleaning without tags?
-    # 
+    # TODO: 
+
+
 
     train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
     train_x_pruned, train_y_pruned = prune_data(train_x, train_y)
@@ -707,9 +695,9 @@ if __name__ == "__main__":
     mini_x_pruned = prune_sentences(mini_x)
     mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 2)
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k',k=.05, n=2)
+    pos_tagger.train([train_x_rare, train_y_pruned])
 
-    mini_y_pred = [pos_tagger.viterbi(sentence,n=2) for sentence in mini_x_rare]
+    mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
     pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
     mini_y_pred_tags = format_output(mini_y_pred)
@@ -720,7 +708,7 @@ if __name__ == "__main__":
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
-    
+    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
     # =================================================================TEST SUBOPTIMALITIES================================================================
     # probabilities = []
     # for i in range(len(dev_x)):
@@ -733,7 +721,7 @@ if __name__ == "__main__":
     #     probabilities.append((y_pred_prob,y_prob))
     #=======================================================================================================================================================
     
-    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    
     # dev_y_pred_tags = format_output(dev_y_pred)
     # deprune_formatted_output_from_sentences(format_output_sentences(dev_x),dev_y_pred_tags)
     # print('depruned')

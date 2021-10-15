@@ -24,6 +24,7 @@ def load_data_split(sentence_file, tag_file=None):
     sentence = ['O']
     sentences_tags = None
     docstart = [0]
+    end_without_period = []
     index = 0    
 
     if (tag_file):
@@ -42,6 +43,7 @@ def load_data_split(sentence_file, tag_file=None):
                         docstart.append(len(sentences))
                         continue 
                     else:
+                        end_without_period.append(len(sentences))
                         sentence.append("END")
                         sentence_tags.append('END')
                         sentences.append(sentence)
@@ -92,18 +94,24 @@ def load_data_split(sentence_file, tag_file=None):
             sentence.append('END')
             sentences.append(sentence)
 
-    return sentences, sentences_tags, docstart
+    return sentences, sentences_tags, docstart, end_without_period
 
-def format_output_split(tags, docstart):
+def format_output_split(tags, docstart, end_without_period):
     temp = [[tag for tag in line if tag != 'O'] for line in tags]
     for i in range(len(docstart)):
         temp[docstart[i]].insert(0,'O')
+    for i in range(len(temp)):
+        if i in end_without_period: continue
+        temp[i].insert(len(temp[i]), '.')
     tag_list = [tag for line in temp for tag in line if tag != 'END']
     return tag_list
 
-def format_output_sentences_split(sentences, docstart):
+def format_output_sentences_split(sentences, docstart, end_without_period):
     for i in range(len(docstart)):
         sentences[docstart[i]].insert(0,'-DOCSTART-')
+    for i in range(len(sentences)):
+        if i in end_without_period: continue
+        sentences[i].insert(len(sentences[i]), '.')
     words = [word for line in sentences for word in line if word != 'END' and word != 'O']
     return words
 
@@ -124,18 +132,26 @@ if __name__ == "__main__":
     # figure out punctuation cleaning without tags?
     # 
 
-    train_x,train_y,docstart = load_data_split("data/mini_x.csv", "data/mini_y.csv")
+    train_x,train_y,docstart,end = load_data_split("data/mini_x.csv", "data/mini_y.csv")
     print(docstart)
     #[0, 7, 13, 20, 25, 70]
     # for i in range(len(docstart)):
     #     print(train_x[docstart[i]][:5])
-    x = format_output_sentences_split(train_x, docstart)
-    y = format_output_split(train_y, docstart)
+    print(end)
+    # end = [x+1 for x in end]
+    # for i in range(len(end)):
+    #     print(train_x[end[i]][:5])
+
+    x = format_output_sentences_split(train_x, docstart,end)
+    y = format_output_split(train_y, docstart, end)
+    
+    
     deprune_formatted_output_from_sentences(x, y)
     filex = open("mini_test_x.csv", "w")
     filex.write("id,word"+"\n")
     for i in range(len(x)):
         filex.write(str(i)+",\"" + x[i] +"\"" + "\n")
     filex.close()
-    print(x)
+
+
     

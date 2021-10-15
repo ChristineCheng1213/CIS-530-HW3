@@ -66,7 +66,9 @@ def load_data_split(sentence_file, tag_file=None):
     sentence = ['O']
     sentences_tags = None
     docstart = [0]
-    
+    end_without_period = []
+    index = 0    
+
     if (tag_file):
         sentences_tags = []
         sentence_tags = ['O']
@@ -78,17 +80,20 @@ def load_data_split(sentence_file, tag_file=None):
             for line1, line2 in zip(x_data, y_data):
                 word = line1.split(',',1)[1].strip()[1:-1]
                 tag = line2.split(',',1)[1].strip()[1:-1]
-                print(tag)
-                if word.strip() == '-DOCSTART-':
-
-                    if len(sentence) == 1 and sentence[-1] == 'O': continue 
+                if word.strip() == '-DOCSTART-':  
+                    if len(sentence) == 1 and sentence[-1] == 'O': 
+                        docstart.append(len(sentences))
+                        continue 
                     else:
+                        end_without_period.append(len(sentences))
                         sentence.append("END")
                         sentence_tags.append('END')
                         sentences.append(sentence)
                         sentences_tags.append(sentence_tags)
                         sentence = ['O']
                         sentence_tags = ['O']
+                        docstart.append(len(sentences))
+                        
                 elif word.strip() in PERIOD_TAGS:
                     sentence.append("END")
                     sentence_tags.append("END")
@@ -96,6 +101,7 @@ def load_data_split(sentence_file, tag_file=None):
                     sentences_tags.append(sentence_tags)
                     sentence = ['O']
                     sentence_tags = ['O']
+                    index += 1
                 else:
                     sentence.append(word)
                     sentence_tags.append(tag)
@@ -110,22 +116,28 @@ def load_data_split(sentence_file, tag_file=None):
             next(x_data)
             for line in x_data:
                 word = line.split(',',1)[1].strip()[1:-1]
-                if word.strip() == '-DOCSTART-':
-                    if len(sentence) == 1 and sentence[-1] == 'O': continue 
+                if word.strip() == '-DOCSTART-':  
+                    if len(sentence) == 1 and sentence[-1] == 'O': 
+                        docstart.append(len(sentences))
+                        continue 
                     else:
+                        end_without_period.append(len(sentences))
                         sentence.append("END")
                         sentences.append(sentence)
                         sentence = ['O']
+                        docstart.append(len(sentences))
+                        
                 elif word.strip() in PERIOD_TAGS:
                     sentence.append("END")
                     sentences.append(sentence)
-                    sentence = ['O']                   
-                else: 
+                    sentence = ['O']
+                else:
                     sentence.append(word)
-            sentence.append('END')
-            sentences.append(sentence)
-            
-    return sentences, sentences_tags
+            if len(sentence) > 1 or sentence[-1] != 'O': 
+                sentence.append("END")
+                sentences.append(sentence)
+
+    return sentences, sentences_tags, docstart, end_without_period
 
 
 def prune_data(sentences, tags):
@@ -672,7 +684,24 @@ def format_output_sentences(sentences):
             words[i] = '-DOCSTART-'
     return words
 
+def format_output_split(tags, docstart, end_without_period):
+    temp = [[tag for tag in line if tag != 'O'] for line in tags]
+    for i in range(len(docstart)):
+        temp[docstart[i]].insert(0,'O')
+    for i in range(len(temp)):
+        if i in end_without_period: continue
+        temp[i].insert(len(temp[i]), '.')
+    tag_list = [tag for line in temp for tag in line if tag != 'END']
+    return tag_list
 
+def format_output_sentences_split(sentences, docstart, end_without_period):
+    for i in range(len(docstart)):
+        sentences[docstart[i]].insert(0,'-DOCSTART-')
+    for i in range(len(sentences)):
+        if i in end_without_period: continue
+        sentences[i].insert(len(sentences[i]), '.')
+    words = [word for line in sentences for word in line if word != 'END' and word != 'O']
+    return words
 
 
 
@@ -682,7 +711,8 @@ if __name__ == "__main__":
 
 
 
-    train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
+    #train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
+    train_x,train_y,_,_ = load_data_split("data/train_x.csv", "data/train_y.csv")
     train_x_pruned, train_y_pruned = prune_data(train_x, train_y)
     train_x_rare, word_counts = rare_words_morpho_train(train_x_pruned, threshold=2)
     for i in range(len(train_x_rare)):
@@ -691,7 +721,8 @@ if __name__ == "__main__":
     dev_x_pruned = prune_sentences(dev_x)
     dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, 2)
     
-    mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
+    #mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
+    mini_x, mini_y, doc, end = load_data_split("data/mini_x.csv", "data/mini_y.csv")
     mini_x_pruned = prune_sentences(mini_x)
     mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 2)
     pos_tagger = POSTagger()
@@ -700,10 +731,12 @@ if __name__ == "__main__":
     mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
     pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
-    mini_y_pred_tags = format_output(mini_y_pred)
-    print(len(mini_y_pred_tags))
-    deprune_formatted_output_from_sentences(format_output_sentences(mini_x),mini_y_pred_tags)
-    print('depruned')
+    # mini_y_pred_tags = format_output(mini_y_pred)
+    # print(len(mini_y_pred_tags))
+    # deprune_formatted_output_from_sentences(format_output_sentences(mini_x),mini_y_pred_tags)
+    # print('depruned')
+    mini_y_pred_tags = format_output_split(mini_y_pred,doc,end)
+    deprune_formatted_output_from_sentences(format_output_sentences_split(mini_x,doc,end),mini_y_pred_tags)
     print(len(mini_y_pred_tags))
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(mini_y_pred)):

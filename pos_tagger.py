@@ -15,10 +15,10 @@ TAGS = {'O':0,'CC':1,'CD':2,'DT':3,'EX':4,'FW':5,'IN':6,'JJ':7,'JJR':8,'JJS':9,'
     'WP':34,'WP$':35,'WRB':36, 'END':37}
 TAG_IDS = {v:k for k,v in TAGS.items()}
 NUM_TAGS = len(TAGS)
+NUM_TAGS_SQR = NUM_TAGS**2
 PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
 PUNCTUATION_TAGS = {'#':'#','\'\'':'\'\'','(':'(','{':'(',')':')','}':')',',':',','!':'.','.':'.','?':'.','-':':','--':':','...':':',':':':',';':':','`':'``','``':'``','non-``':'``'}
-
-
+PERIOD_TAGS = ['.', '!', '?']
 ## ======================== Loading Data ======================== ##
 
 def load_data(sentence_file, tag_file=None):

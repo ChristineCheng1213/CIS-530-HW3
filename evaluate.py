@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import csv
 from sklearn.metrics import f1_score, confusion_matrix
 from argparse import ArgumentParser
 
@@ -27,7 +28,7 @@ dev  = pd.read_csv(args.dev_path,  index_col = "id")
 
 pred.columns = ["predicted"]
 dev.columns  = ["actual"]
-
+print(len(pred.index),len(dev.index))
 data = dev.join(pred)
 
 
@@ -40,12 +41,17 @@ if args.show_confusion:
     print("Confusion Matrix:")
     
     if confusion.empty: print("None!")
-    else: print(confusion)
+    else: print(confusion.sort_values(by='count',ascending=False))
 
-else:
-
+else: 
+    print(data)
+    data.to_csv('data/dev_data.csv',quoting=csv.QUOTE_NONNUMERIC)
+    errors_df = data[data['predicted']!=data['actual']]
+    print(errors_df)
+    errors_df.to_csv('data/mini_errors.csv',quoting=csv.QUOTE_NONNUMERIC)
     print("Mean F1 Score:", f1_score(
         data.actual,
         data.predicted,
         average = "weighted"
     ))
+

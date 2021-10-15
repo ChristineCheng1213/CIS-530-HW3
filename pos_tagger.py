@@ -558,7 +558,7 @@ class POSTagger():
         """
         return []
 
-    def beam_search(self, sequence, K=1): 
+    def beam_search(self, sequence, K=1, n=3): 
         prev_indices = [0]
         prev_pis = [0]
         assigned_tags = [0]
@@ -688,18 +688,18 @@ def format_output_split(tags, docstart, end_without_period):
     temp = [[tag for tag in line if tag != 'O'] for line in tags]
     for i in range(len(docstart)):
         temp[docstart[i]].insert(0,'O')
-    for i in range(len(temp)):
-        if i in end_without_period: continue
-        temp[i].insert(len(temp[i]), '.')
+    # for i in range(len(temp)):
+    #     if i in end_without_period: continue
+    #     temp[i].insert(len(temp[i]), '.')
     tag_list = [tag for line in temp for tag in line if tag != 'END']
     return tag_list
 
 def format_output_sentences_split(sentences, docstart, end_without_period):
     for i in range(len(docstart)):
         sentences[docstart[i]].insert(0,'-DOCSTART-')
-    for i in range(len(sentences)):
-        if i in end_without_period: continue
-        sentences[i].insert(len(sentences[i]), '.')
+    # for i in range(len(sentences)):
+    #     if i in end_without_period: continue
+    #     sentences[i].insert(len(sentences[i]), '.')
     words = [word for line in sentences for word in line if word != 'END' and word != 'O']
     return words
 
@@ -712,21 +712,30 @@ if __name__ == "__main__":
 
 
     #train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
+    rare_threshold = 2
     train_x,train_y,_,_ = load_data_split("data/train_x.csv", "data/train_y.csv")
     train_x_pruned, train_y_pruned = prune_data(train_x, train_y)
-    train_x_rare, word_counts = rare_words_morpho_train(train_x_pruned, threshold=2)
+    train_x_rare, word_counts = rare_words_morpho_train(train_x_pruned, threshold=rare_threshold)
     for i in range(len(train_x_rare)):
         if len(train_x_rare[i]) != len(train_y_pruned[i]): print(len(train_x_rare[i]), len(train_y_pruned[i]))
-    dev_x, dev_y = load_data("data/dev_x.csv", "data/dev_y.csv")
+    # Load dev data
+    dev_x_unsplit, dev_y_unsplit = load_data("data/dev_x.csv", "data/dev_y.csv")
+    dev_x,dev_y,dev_doc,dev_end = load_data_split("data/dev_x.csv", "data/dev_y.csv")
     dev_x_pruned = prune_sentences(dev_x)
-    dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, 2)
-    
-    #mini_x, mini_y = load_data("data/mini_x.csv", "data/mini_y.csv")
+    dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, rare_threshold)
+    # Load mini data
+    mini_x_unsplit, mini_y_unsplit = load_data("data/mini_x.csv", "data/mini_y.csv")
     mini_x, mini_y, doc, end = load_data_split("data/mini_x.csv", "data/mini_y.csv")
     mini_x_pruned = prune_sentences(mini_x)
-    mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 2)
+    mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, rare_threshold)
+    # Load test data
+    test_x_unsplit, dev_y_unsplit = load_data("data/test_x.csv", "data/test_y.csv")
+    test_x,test_y,test_doc,test_end = load_data_split("data/test_x.csv", "data/test_y.csv")
+    test_x_pruned = prune_sentences(test_x)
+    test_x_rare = rare_words_morpho(test_x_pruned,word_counts, rare_threshold)
+
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y_pruned])
+    pos_tagger.train([train_x_rare, train_y_pruned],smoothing='linear_interpolation',l_values=[.95,.03])
 
     mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
@@ -736,12 +745,12 @@ if __name__ == "__main__":
     # deprune_formatted_output_from_sentences(format_output_sentences(mini_x),mini_y_pred_tags)
     # print('depruned')
     mini_y_pred_tags = format_output_split(mini_y_pred,doc,end)
-    deprune_formatted_output_from_sentences(format_output_sentences_split(mini_x,doc,end),mini_y_pred_tags)
+    deprune_formatted_output_from_sentences(format_output_sentences(mini_x_unsplit),mini_y_pred_tags)
     print(len(mini_y_pred_tags))
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
-    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    
     # =================================================================TEST SUBOPTIMALITIES================================================================
     # probabilities = []
     # for i in range(len(dev_x)):
@@ -754,11 +763,20 @@ if __name__ == "__main__":
     #     probabilities.append((y_pred_prob,y_prob))
     #=======================================================================================================================================================
     
-    
-    # dev_y_pred_tags = format_output(dev_y_pred)
-    # deprune_formatted_output_from_sentences(format_output_sentences(dev_x),dev_y_pred_tags)
+    # Evaluate dev
+    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    # dev_y_pred_tags = format_output_split(dev_y_pred,dev_doc,dev_end)
+    # deprune_formatted_output_from_sentences(format_output_sentences(dev_x_unsplit),dev_y_pred_tags)
     # print('depruned')
     # pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+
+    # Evaluate test
+    # test_y_pred = [pos_tagger.viterbi(sentence) for sentence in test_x_rare]
+    # test_y_pred_tags = format_output_split(test_y_pred,test_doc,test_end)
+    # deprune_formatted_output_from_sentences(format_output_sentences(test_x_unsplit),test_y_pred_tags)
+    # print('depruned')
+    # pd.DataFrame(enumerate(test_y_pred_tags),columns=['id','tag']).to_csv('data/test_y.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+
     # for i in range(len(dev_y_pred)):
     #     if len(dev_y_pred_tags[i]) != len(dev_y[i]): print(len(dev_y_pred_tags[i]),len(dev_y[i]),i)
     # dev_y_pred_df = pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag'])

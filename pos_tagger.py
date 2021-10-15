@@ -156,7 +156,12 @@ def prune_sentences(sentences):
     """ Prune punctuations for test set """
     pruned_sentences = [[word for word in sentence if (word not in PUNCTUATION_TAGS.keys()) and not "$" in word] for sentence in sentences]
     return pruned_sentences
-        
+
+def prune_tags(sentences,tags):
+    """ Return a matching tag set for pruned sentences"""
+    pruned_tags = [[tag for word, tag in zip(sentence,tags) if (word not in PUNCTUATION_TAGS.keys()) and not "$" in word] for sentence, tags in zip(sentences,tags)]
+    return pruned_tags
+
 
 
 ## ======================== Smoothing ======================== ##
@@ -735,19 +740,17 @@ if __name__ == "__main__":
     test_x_rare = rare_words_morpho(test_x_pruned,word_counts, rare_threshold)
 
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y_pruned],smoothing='linear_interpolation',l_values=[.95,.03])
+    pos_tagger.train([train_x_rare, train_y_pruned],smoothing='linear_interpolation',l_values=[.9,.07])
 
-    mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
+    # Evaluate mini
+    mini_y_pred = [pos_tagger.beam_search(sentence,K=3) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
     pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
-    # mini_y_pred_tags = format_output(mini_y_pred)
-    # print(len(mini_y_pred_tags))
-    # deprune_formatted_output_from_sentences(format_output_sentences(mini_x),mini_y_pred_tags)
-    # print('depruned')
     mini_y_pred_tags = format_output_split(mini_y_pred,doc,end)
     deprune_formatted_output_from_sentences(format_output_sentences(mini_x_unsplit),mini_y_pred_tags)
     print(len(mini_y_pred_tags))
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
     
@@ -764,11 +767,30 @@ if __name__ == "__main__":
     #=======================================================================================================================================================
     
     # Evaluate dev
-    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
-    # dev_y_pred_tags = format_output_split(dev_y_pred,dev_doc,dev_end)
-    # deprune_formatted_output_from_sentences(format_output_sentences(dev_x_unsplit),dev_y_pred_tags)
-    # print('depruned')
-    # pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    dev_y_pred_tags = format_output_split(dev_y_pred,dev_doc,dev_end)
+    deprune_formatted_output_from_sentences(format_output_sentences(dev_x_unsplit),dev_y_pred_tags)
+    print('depruned')
+    pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+
+    # Test beam search
+    # max_beam = 10
+    # dev_y_pred_beam = [[]]* max_beam
+    # dev_y_pred_tags_beam = [[]]* max_beam
+    # for k in range(1,max_beam+1):
+    #     dev_y_pred_beam[k-1] = [pos_tagger.beam_search(sentence,K=k) for sentence in dev_x_rare]
+    #     dev_y_pred_tags_beam[k-1] = format_output_split(dev_y_pred_beam[k-1],dev_doc,dev_end)
+    #     deprune_formatted_output_from_sentences(format_output_sentences(dev_x_unsplit),dev_y_pred_tags_beam[k-1])
+    #     print('depruned')
+    #     pd.DataFrame(enumerate(dev_y_pred_tags_beam[k-1]),columns=['id','tag']).to_csv('data/dev_y_pred_'+str(k)+'_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    #     suboptimalities = 0
+    #     for i in range(len(dev_x)):
+    #         y_pred_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pred_beam[k-1][i])
+    #         y_prob = pos_tagger.sequence_probability(dev_x_rare[i],dev_y_pruned[i])
+    #         if y_prob > y_pred_prob:
+    #             suboptimalities+=1
+    #     print(f'Beam search with width {k} found optimal solution {100*(len(dev_x)-suboptimalities)/len(dev_x)}% of the time')
+
 
     # Evaluate test
     # test_y_pred = [pos_tagger.viterbi(sentence) for sentence in test_x_rare]

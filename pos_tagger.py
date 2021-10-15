@@ -60,43 +60,69 @@ def load_data(sentence_file, tag_file=None):
 
     return sentences, sentences_tags
 
-def load_data_split(sentence_file, tag_file=None)
+def load_data_split(sentence_file, tag_file=None):
     sentences = []
     sentence = ['O']
     sentences_tags = None
-
-    with open(sentence_file, 'r') as x_data:
-        print(sentence_file)
-        next(x_data) # Skip first -DOCSTART-
-        next(x_data)
-        for line in x_data:
-            word = line.split(',',1)[1].strip()[1:-1]
-            if word.strip() == '-DOCSTART-':
-                sentence.append("END")
-                sentences.append(sentence)
-                sentence = ['O']
-            else: 
-                sentence.append(word)
-        sentence.append('END')
-        sentences.append(sentence)
-    if tag_file:
-        print(tag_file)
+    docstart = [0]
+    
+    if (tag_file):
         sentences_tags = []
         sentence_tags = ['O']
-        with open(tag_file, 'r') as y_data:
+        with open(sentence_file, 'r') as x_data, open(tag_file, 'r') as y_data:
+            next(x_data)
+            next(x_data)
             next(y_data)
             next(y_data)
-            for line in y_data:
-                tag = line.split(',',1)[1].strip()[1:-1]
-                if tag == 'O':
-                    sentence_tags.append('END')
+            for line1, line2 in zip(x_data, y_data):
+                word = line1.split(',',1)[1].strip()[1:-1]
+                tag = line2.split(',',1)[1].strip()[1:-1]
+                print(tag)
+                if word.strip() == '-DOCSTART-':
+                    if len(sentence) == 1 and sentence[-1] == 'O': continue 
+                    else:
+                        sentence.append("END")
+                        sentence_tags.append('END')
+                        sentences.append(sentence)
+                        sentences_tags.append(sentence_tags)
+                        sentence = ['O']
+                        sentence_tags = ['O']
+                elif word.strip() in PERIOD_TAGS:
+                    sentence.append("END")
+                    sentence_tags.append("END")
+                    sentences.append(sentence)
                     sentences_tags.append(sentence_tags)
+                    sentence = ['O']
                     sentence_tags = ['O']
-                else: 
+                else:
+                    sentence.append(word)
                     sentence_tags.append(tag)
-            sentence_tags.append('END')
-            sentences_tags.append(sentence_tags)
-
+            if len(sentence) > 1 or sentence[-1] != 'O': 
+                sentence.append("END")
+                sentences.append(sentence)
+                sentence_tags.append("END")
+                sentences_tags.append(sentence_tags)
+    else:
+        with open(sentence_file, 'r') as x_data:
+            next(x_data) # Skip first -DOCSTART-
+            next(x_data)
+            for line in x_data:
+                word = line.split(',',1)[1].strip()[1:-1]
+                if word.strip() == '-DOCSTART-':
+                    if len(sentence) == 1 and sentence[-1] == 'O': continue 
+                    else:
+                        sentence.append("END")
+                        sentences.append(sentence)
+                        sentence = ['O']
+                elif word.strip() in PERIOD_TAGS:
+                    sentence.append("END")
+                    sentences.append(sentence)
+                    sentence = ['O']                   
+                else: 
+                    sentence.append(word)
+            sentence.append('END')
+            sentences.append(sentence)
+            
     return sentences, sentences_tags
 
 

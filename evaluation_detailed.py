@@ -3,7 +3,7 @@ from sklearn.metrics import f1_score, confusion_matrix
 
 train_x = pd.read_csv("data/train_x.csv", index_col = "id")
 dev_x = pd.read_csv("data/dev_x.csv",  index_col = "id")
-dev_pred = pd.read_csv("data/dev_y_pred_tags.csv", index_col = "id")
+dev_pred = pd.read_csv("data/dev_y_pred_tags_bigram.csv", index_col = "id")
 dev_y  = pd.read_csv("data/dev_y.csv",  index_col = "id")
 train_x.columns = ["word"]
 dev_x.columns = ["word"]

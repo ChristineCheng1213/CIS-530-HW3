@@ -61,7 +61,7 @@ def load_data(sentence_file, tag_file=None):
 
     return sentences, sentences_tags
 
-def load_data_split(sentence_file, tag_file=None)
+def load_data_split(sentence_file, tag_file=None):
     sentences = []
     sentence = ['O']
     sentences_tags = None
@@ -516,7 +516,7 @@ class POSTagger():
         """
         return []
 
-    def beam_search(self, sequence, K=1): 
+    def beam_search(self, sequence, K=1, n=3): 
         prev_indices = [0]
         prev_pis = [0]
         assigned_tags = [0]

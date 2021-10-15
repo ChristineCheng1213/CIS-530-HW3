@@ -74,25 +74,26 @@ def load_data_split(sentence_file, tag_file=None):
             next(x_data)
             for line in x_data:
                 word = line.split(',',1)[1].strip()[1:-1]
-                docstart.append(index)
-                if word.strip() == '-DOCSTART-':
-                    docstart.append(index)
+                if word.strip() == '-DOCSTART-':  
                     if len(sentence) == 1 and sentence[-1] == 'O': 
+                        docstart.append(len(sentences))
                         continue 
                     else:
+                        end_without_period.append(len(sentences))
                         sentence.append("END")
                         sentences.append(sentence)
                         sentence = ['O']
-                        index += 1
+                        docstart.append(len(sentences))
+                        
                 elif word.strip() in PERIOD_TAGS:
                     sentence.append("END")
                     sentences.append(sentence)
-                    sentence = ['O'] 
-                    index += 1                  
-                else: 
+                    sentence = ['O']
+                else:
                     sentence.append(word)
-            sentence.append('END')
-            sentences.append(sentence)
+            if len(sentence) > 1 or sentence[-1] != 'O': 
+                sentence.append("END")
+                sentences.append(sentence)
 
     return sentences, sentences_tags, docstart, end_without_period
 
@@ -132,26 +133,80 @@ if __name__ == "__main__":
     # figure out punctuation cleaning without tags?
     # 
 
-    train_x,train_y,docstart,end = load_data_split("data/mini_x.csv", "data/mini_y.csv")
-    print(docstart)
+    # train_x,train_y,docstart,end = load_data_split("data/mini_x.csv", "data/mini_y.csv")
+
     #[0, 7, 13, 20, 25, 70]
     # for i in range(len(docstart)):
     #     print(train_x[docstart[i]][:5])
-    print(end)
+
     # end = [x+1 for x in end]
     # for i in range(len(end)):
     #     print(train_x[end[i]][:5])
 
-    x = format_output_sentences_split(train_x, docstart,end)
-    y = format_output_split(train_y, docstart, end)
+    # x = format_output_sentences_split(train_x, docstart,end)
+    # y = format_output_split(train_y, docstart, end)
     
     
-    deprune_formatted_output_from_sentences(x, y)
-    filex = open("mini_test_x.csv", "w")
-    filex.write("id,word"+"\n")
-    for i in range(len(x)):
-        filex.write(str(i)+",\"" + x[i] +"\"" + "\n")
-    filex.close()
+    # deprune_formatted_output_from_sentences(x, y)
+    # filex = open("mini_test_x.csv", "w")
+    # filex.write("id,word"+"\n")
+    # for i in range(len(x)):
+    #     filex.write(str(i)+",\"" + x[i] +"\"" + "\n")
+    # filex.close()
+    
+    pred = pd.read_csv("data/dev_y_pred_tags_trigram.csv", index_col = "id")
+    dev  = pd.read_csv("data/dev_y.csv",  index_col = "id")
+
+    pred.columns = ["predicted"]
+    dev.columns  = ["actual"]
+
+    data = dev.join(pred)
+    data["count"] = 1
+    data["result"] = np.where(data["actual"]==data["predicted"], 1, 0)
+    counts = data.groupby(["actual", "predicted"]).count().reset_index()
+    groupby_actual = data.groupby(["actual"]).sum().reset_index()
+    groupby_pred = data.groupby(["predicted"]).sum().reset_index()
+    groupby_actual["recall"] = groupby_actual["result"] / groupby_actual["count"]
+    groupby_pred["precision"] = groupby_pred["result"] / groupby_pred["count"]
+
+    #print(groupby_actual)
+    temp = pd.merge(groupby_actual[['actual','recall']],groupby_pred[['predicted','precision']], left_on='actual', right_on='predicted')
+    groupby_tag = temp[['actual','precision','recall']]
+    groupby_tag['f1'] = 2*groupby_tag['precision']*groupby_tag['recall'] / (groupby_tag['precision']+groupby_tag['recall'])
+    groupby_tag = groupby_tag.sort_values(by="f1")
+    print(groupby_tag)
 
 
-    
+    # train = pd.read_csv("data/train_x.csv", index_col = "id")
+    # dev = pd.read_csv("data/dev_x.csv", index_col = "id")
+    # test = pd.read_csv("data/test_x.csv", index_col = "id")
+    # print(len(train))
+    # print(len(dev))
+    # print(len(test))
+    # print(len(train.word.unique()))
+    # print(len(dev.word.unique()))
+    # print(len(test.word.unique()))
+
+
+#========
+    # train_x = pd.read_csv("data/train_x.csv", index_col = "id")
+    # dev_x  = pd.read_csv("data/dev_x.csv",  index_col = "id")
+    # train_y = pd.read_csv("data/train_y.csv", index_col = "id")
+    # dev_y  = pd.read_csv("data/dev_y.csv",  index_col = "id")
+    # train_x.columns = ["word"]
+    # dev_x.columns = ["word"]
+    # train_y.columns = ["tag"]
+    # dev_y.columns = ["tag"]
+
+    # train_data = train_x.join(train_y)
+    # train_data["count"] = 1
+    # # data["result"] = np.where(data["actual"]==data["predicted"], 1, 0)
+    # train_counts = train_data.groupby(["tag"]).count().reset_index()
+
+    # dev_data = dev_x.join(dev_y)
+    # dev_data["count"] = 1
+    # dev_counts = dev_data.groupby(["tag"]).count().reset_index()
+
+    # counts = pd.merge(train_counts[["tag","count"]], dev_counts[["tag","count"]], on="tag")
+    # counts = counts.sort_values(by="count_x")
+    # print(counts)

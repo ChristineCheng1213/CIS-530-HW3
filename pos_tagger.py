@@ -26,9 +26,6 @@ PERIOD_TAGS = ['.', '!', '?']
 ## ======================== Loading Data ======================== ##
 
 def load_data(sentence_file, tag_file=None):
-    """Loads data from two files: one containing sentences and one containing tags.
-    
-    tag_file is optional, so this function can be used to load the test data.
     sentences = []
     sentence = ['O']
     sentences_tags = None
@@ -364,6 +361,7 @@ class POSTagger():
                             c_uvsw = ngrams[3].get((u,v,s,w),0)
                             trans_matrix[u][v][s][w] = c_uvsw / c_uvs if c_uvs != 0 else 0
         return trans_matrix     
+
 
     def get_transmissions_add_k(self, data, k, n=3):
         matrix_shape = tuple(NUM_TAGS for i in range(n))

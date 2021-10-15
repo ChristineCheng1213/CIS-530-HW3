@@ -734,7 +734,7 @@ if __name__ == "__main__":
     # TODO: 
 
 
-    N_GRAM = 2
+    N_GRAM = 3
     #train_x,train_y = load_data("data/train_x.csv", "data/train_y.csv")
     rare_threshold = 2
     train_x,train_y,_,_ = load_data_split("data/train_x.csv", "data/train_y.csv")
@@ -753,7 +753,7 @@ if __name__ == "__main__":
     mini_x_pruned = prune_sentences(mini_x)
     mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, rare_threshold)
     # Load test data
-    test_x_unsplit, dev_y_unsplit = load_data("data/test_x.csv")
+    test_x_unsplit, test_y_unsplit = load_data("data/test_x.csv")
     test_x,test_y,test_doc,test_end = load_data_split("data/test_x.csv")
     test_x_pruned = prune_sentences(test_x)
     test_x_rare = rare_words_morpho(test_x_pruned,word_counts, rare_threshold)
@@ -762,13 +762,13 @@ if __name__ == "__main__":
     pos_tagger.train([train_x_rare, train_y_pruned],n=N_GRAM,smoothing='linear_interpolation',l_values=[.95,.03])
 
     # Evaluate mini
-    mini_y_pred = [pos_tagger.beam_search(sentence,K=3,n=N_GRAM) for sentence in mini_x_rare]
-    pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
-    pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
-    mini_y_pred_tags = format_output_split(mini_y_pred,doc,end)
-    deprune_formatted_output_from_sentences(format_output_sentences(mini_x_unsplit),mini_y_pred_tags)
-    print(len(mini_y_pred_tags))
-    pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    # mini_y_pred = [pos_tagger.beam_search(sentence,K=3,n=N_GRAM) for sentence in mini_x_rare]
+    # pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
+    # pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
+    # mini_y_pred_tags = format_output_split(mini_y_pred,doc,end)
+    # deprune_formatted_output_from_sentences(format_output_sentences(mini_x_unsplit),mini_y_pred_tags)
+    # print(len(mini_y_pred_tags))
+    # pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
 
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
@@ -792,14 +792,16 @@ if __name__ == "__main__":
     print('depruned')
     pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags_bigram.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
 
-    # Test beam search
+    #Test beam search
+    # dev_x_pruned,dev_y_pruned = prune_data(dev_x,dev_y)
+    # dev_x_rare = rare_words_morpho(dev_x_pruned,word_counts, rare_threshold)
     # max_beam = 10
     # dev_y_pred_beam = [[]]* max_beam
     # dev_y_pred_tags_beam = [[]]* max_beam
     # for k in range(1,max_beam+1):
     #     dev_y_pred_beam[k-1] = [pos_tagger.beam_search(sentence,K=k) for sentence in dev_x_rare]
     #     dev_y_pred_tags_beam[k-1] = format_output_split(dev_y_pred_beam[k-1],dev_doc,dev_end)
-    #     deprune_formatted_output_from_sentences(format_output_sentences(dev_x_unsplit),dev_y_pred_tags_beam[k-1])
+    #     deprune_formatted_output(format_output(dev_y_unsplit),dev_y_pred_tags_beam[k-1])
     #     print('depruned')
     #     pd.DataFrame(enumerate(dev_y_pred_tags_beam[k-1]),columns=['id','tag']).to_csv('data/dev_y_pred_'+str(k)+'_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     #     suboptimalities = 0

@@ -19,16 +19,55 @@ NUM_TAGS_SQR = NUM_TAGS**2
 PRUNED_PUNCTUATION = '!""#\\\'\'()*+,--./:;<=>?[]^_``{|}~'
 PUNCTUATION_TAGS = {'#':'#','\'\'':'\'\'','(':'(','{':'(',')':')','}':')',',':',','!':'.','.':'.','?':'.','-':':','--':':','...':':',':':':',';':':','`':'``','``':'``','non-``':'``'}
 PERIOD_TAGS = ['.', '!', '?']
+<<<<<<< HEAD
+=======
+
+>>>>>>> temp
 ## ======================== Loading Data ======================== ##
 
 def load_data(sentence_file, tag_file=None):
     """Loads data from two files: one containing sentences and one containing tags.
     
     tag_file is optional, so this function can be used to load the test data.
+    sentences = []
+    sentence = ['O']
+    sentences_tags = None
 
-    Suggested to split the data by the document-start symbol.
+    with open(sentence_file, 'r') as x_data:
+        print(sentence_file)
+        next(x_data) # Skip first -DOCSTART-
+        next(x_data)
+        for line in x_data:
+            word = line.split(',',1)[1].strip()[1:-1]
+            if word.strip() == '-DOCSTART-':
+                sentence.append("END")
+                sentences.append(sentence)
+                sentence = ['O']
+            else: 
+                sentence.append(word)
+        sentence.append('END')
+        sentences.append(sentence)
+    if tag_file:
+        print(tag_file)
+        sentences_tags = []
+        sentence_tags = ['O']
+        with open(tag_file, 'r') as y_data:
+            next(y_data)
+            next(y_data)
+            for line in y_data:
+                tag = line.split(',',1)[1].strip()[1:-1]
+                if tag == 'O':
+                    sentence_tags.append('END')
+                    sentences_tags.append(sentence_tags)
+                    sentence_tags = ['O']
+                else: 
+                    sentence_tags.append(tag)
+            sentence_tags.append('END')
+            sentences_tags.append(sentence_tags)
 
-    """
+    return sentences, sentences_tags
+
+def load_data_split(sentence_file, tag_file=None)
     sentences = []
     sentence = ['O']
     sentences_tags = None
@@ -81,6 +120,7 @@ def prune_data(sentences, tags):
     return pruned_sentences, pruned_tags
 
 def prune_sentences(sentences):
+    """ Prune punctuations for test set """
     pruned_sentences = [[word for word in sentence if (word not in PUNCTUATION_TAGS.keys()) and not "$" in word] for sentence in sentences]
     return pruned_sentences
         
@@ -334,7 +374,7 @@ class POSTagger():
                 c_u = ngrams[0].get((u),0)
                 for v in range(NUM_TAGS):
                     c_uv = ngrams[1].get((u,v), 0)
-                    trans_matrix[u][v] = (c_uv+k) / (c_u+k**(n-1))
+                    trans_matrix[u][v] = (c_uv+k) / (c_u+k*NUM_TAGS**(n-1))
         elif n==3:
             for u in range(NUM_TAGS):
                 for v in range(NUM_TAGS):
@@ -490,17 +530,33 @@ class POSTagger():
             new_indices = []
             new_pis = []
             for index, pi in zip(prev_indices, prev_pis):
-                u = index // NUM_TAGS
-                v = index % NUM_TAGS
-                for i in range(NUM_TAGS):
-                    new_pi = pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
-                    new_indices.append(v*NUM_TAGS + i)
-                    new_pis.append(new_pi)
+                if n == 2:
+                    for i in range(NUM_TAGS):
+                        new_pi = pi + np.log(self.ngram_transmissions[index][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                        new_indices.append(i)
+                        new_pis.append(new_pi)
+                elif n == 3:
+                    u = index // NUM_TAGS
+                    v = index % NUM_TAGS
+                    for i in range(NUM_TAGS):
+                        new_pi = pi + np.log(self.ngram_transmissions[u][v][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                        new_indices.append(v*NUM_TAGS + i)
+                        new_pis.append(new_pi)
+                elif n == 4:
+                    # encode = u*TAG*TAG + v*TAG + s
+                    u = index // NUM_TAGS_SQR
+                    v = index // NUM_TAGS
+                    s = index % NUM_TAGS
+                    for i in range(NUM_TAGS):
+                        new_pi = np.log(self.ngram_transmission[u][v][s][i]) + np.log(self.emissions[self.word_encodings[sequence[k]]][i])
+                        new_indices.append(v*NUM_TAGS_SQR + s*NUM_TAGS + i)
+                        new_pis.append(new_pi)
             
             new_sorted = sorted(zip(new_pis, new_indices), key=lambda pair:pair[0])[-K:]
             prev_indices = [i for p, i in new_sorted]
             prev_pis = [p for p, i in new_sorted]
-            assigned_tags.append(prev_indices[-1] % NUM_TAGS)
+            assigned_tag = prev_indices[-1] if n == 2 else prev_indices[-1] % NUM_TAGS
+            assigned_tags.append(assigned_tag)
 
         return [TAG_IDS[tag] for tag in assigned_tags]
 

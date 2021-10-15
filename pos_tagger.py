@@ -622,7 +622,7 @@ class POSTagger():
                     if best_path[1]>np.NINF:
                         nonzero_indices.append(v)
             tags = [NUM_TAGS-1] # Initializes tags with end tag and best preceding tag
-            for k in range(len(sequence)-1,1,-1):
+            for k in range(len(sequence)-1,0,-1):
                 prev_index = int(backpointers[tags[0]][k])
                 tags.insert(0,prev_index)
             tag_strings = [TAG_IDS[tag] for tag in tags]
@@ -683,9 +683,9 @@ if __name__ == "__main__":
     mini_x_pruned = prune_sentences(mini_x)
     mini_x_rare = rare_words_morpho(mini_x_pruned,word_counts, 2)
     pos_tagger = POSTagger()
-    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k',k=.05)
+    pos_tagger.train([train_x_rare, train_y_pruned], smoothing='add-k',k=.05, n=2)
 
-    mini_y_pred = [pos_tagger.viterbi(sentence) for sentence in mini_x_rare]
+    mini_y_pred = [pos_tagger.viterbi(sentence,n=2) for sentence in mini_x_rare]
     pd.DataFrame(mini_x_rare).to_csv('data/mini_x_rare.csv')
     pd.DataFrame(mini_y_pred).to_csv('data/mini_y_pred.csv')
     mini_y_pred_tags = format_output(mini_y_pred)
@@ -696,7 +696,7 @@ if __name__ == "__main__":
     pd.DataFrame(enumerate(mini_y_pred_tags),columns=['id','tag']).to_csv('data/mini_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(mini_y_pred)):
     #     print(len(mini_y_pred[i]),len(mini_y[i]))
-    dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    
     # =================================================================TEST SUBOPTIMALITIES================================================================
     # probabilities = []
     # for i in range(len(dev_x)):
@@ -709,11 +709,11 @@ if __name__ == "__main__":
     #     probabilities.append((y_pred_prob,y_prob))
     #=======================================================================================================================================================
     
-    
-    dev_y_pred_tags = format_output(dev_y_pred)
-    deprune_formatted_output_from_sentences(format_output_sentences(dev_x),dev_y_pred_tags)
-    print('depruned')
-    pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
+    # dev_y_pred = [pos_tagger.viterbi(sentence) for sentence in dev_x_rare]
+    # dev_y_pred_tags = format_output(dev_y_pred)
+    # deprune_formatted_output_from_sentences(format_output_sentences(dev_x),dev_y_pred_tags)
+    # print('depruned')
+    # pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag']).to_csv('data/dev_y_pred_tags.csv',index=False, quoting=csv.QUOTE_NONNUMERIC)
     # for i in range(len(dev_y_pred)):
     #     if len(dev_y_pred_tags[i]) != len(dev_y[i]): print(len(dev_y_pred_tags[i]),len(dev_y[i]),i)
     # dev_y_pred_df = pd.DataFrame(enumerate(dev_y_pred_tags),columns=['id','tag'])
